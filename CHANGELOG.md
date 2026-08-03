@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.1.3
+
+### The test suite could not run on a machine with cores to spare
+
+`node --test` runs test files in parallel, one per core. Five files, five mock households, all binding the same fixed ports — so on a ten-core machine the suite fell over with `EADDRINUSE` while a two-core container ran them in a queue and never noticed. The same fixed range had also just been introduced to solve the macOS problem in 3.1.1, trading one collision for another.
+
+The mock speakers now listen on a port the operating system hands them, and announce it in their `LOCATION` header the way a real device does. Nothing is fixed, so nothing can collide: the suite runs at whatever parallelism the machine offers. The guard test checks the ports are ephemeral as well as distinct.
+
+124 unit tests and 100 browser checks, verified both serially and at ten-way parallelism.
+
 ## 3.1.2
 
 ### The level can be typed

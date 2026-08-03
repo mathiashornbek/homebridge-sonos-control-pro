@@ -10,22 +10,23 @@ const { agent } = require('../src/sonos/soap');
  * Every player is a real HTTP server answering real SOAP, so the transport is
  * exercised end to end — which is exactly where protocol bugs hide.
  *
- * Each one listens on 127.0.0.1 at its own port rather than on its own loopback
- * *address*. Linux hands you the whole 127.0.0.0/8 range, so 127.0.0.2 and
- * friends work there; macOS configures only 127.0.0.1, and binding to anything
- * else fails with EADDRNOTAVAIL before a single test runs. Ports are available
- * everywhere, and the players announce theirs in the LOCATION header exactly as
- * a real device does.
+ * Each one listens on 127.0.0.1 at a port the operating system picks, and
+ * announces it in its LOCATION header exactly as a real device does.
+ *
+ * Neither half of that is incidental. Giving each player its own loopback
+ * *address* (127.0.0.2, 127.0.0.3, …) works on Linux and fails on macOS, which
+ * configures only 127.0.0.1. And a fixed port range collides the moment two
+ * test files run at once — which the Node test runner does by default on any
+ * machine with cores to spare. An ephemeral port has neither problem.
  */
 
-const PORT = 14400;
-
 class MockPlayer {
-  constructor(household, { name, uuid, host, port }) {
+  constructor(household, { name, uuid, host }) {
     this.household = household;
     this.name = name;
     this.uuid = uuid;
-    this.port = port;
+    /** Assigned by the operating system when the player starts listening. */
+    this.port = 0;
     this.host = host;
     this.volume = 20;
     this.muted = false;
@@ -54,7 +55,6 @@ class MockHousehold {
           name,
           uuid: `RINCON_MOCK${String(index + 1).padStart(4, '0')}`,
           host: '127.0.0.1',
-          port: PORT + index,
         }),
     );
     /** uuid → coordinator uuid */
@@ -105,12 +105,15 @@ class MockHousehold {
     return this;
   }
 
-  /** @private Bring one player online on its own port. */
+  /** @private Bring one player online on a port the OS hands us. */
   _serve(player) {
     return new Promise((resolve, reject) => {
       const server = http.createServer((request, response) => this.handle(player, request, response));
       server.on('error', reject);
-      server.listen(player.port, player.host, () => resolve());
+      server.listen(0, player.host, () => {
+        player.port = server.address().port;
+        resolve();
+      });
       this.servers.push(server);
     });
   }
@@ -126,7 +129,6 @@ class MockHousehold {
       name,
       uuid: `RINCON_MOCK${String(index + 1).padStart(4, '0')}`,
       host: '127.0.0.1',
-      port: PORT + index,
     });
     this.players.push(player);
     this.grouping.set(player.uuid, player.uuid);
@@ -417,4 +419,4 @@ function send(response, status, body) {
 /** Silent logger for tests. */
 const quietLog = { info() {}, warn() {}, error() {}, debug() {} };
 
-module.exports = { MockHousehold, MockPlayer, PORT, quietLog };
+module.exports = { MockHousehold, MockPlayer, quietLog };

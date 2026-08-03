@@ -6,7 +6,7 @@ const os = require('node:os');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { MockHousehold, PORT, quietLog } = require('./mock-sonos');
+const { MockHousehold, quietLog } = require('./mock-sonos');
 const { SonosSystem } = require('../src/sonos/system');
 const { SceneRunner } = require('../src/engine/runner');
 const { SceneStore } = require('../src/store');
@@ -28,7 +28,6 @@ async function harness({ scenes = fixture.SCENES, fast = true } = {}) {
     // has to name the port — the same "host:port" form a real config accepts.
     seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
     discoveryTimeout: 200,
-    port: PORT,
   });
   await system.discover({ force: true });
 

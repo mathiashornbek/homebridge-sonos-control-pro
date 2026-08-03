@@ -352,11 +352,12 @@ test('renaming the package does not change accessory identity in Apple Home', ()
 
 // ─────────────────────────────────────────────────────────────── portability
 
-test('the mock household binds only to 127.0.0.1', async (t) => {
-  // Linux gives you the whole 127.0.0.0/8 range; macOS configures 127.0.0.1 and
-  // nothing else, so a mock that spread itself across 127.0.0.2, 127.0.0.3 and
-  // friends failed with EADDRNOTAVAIL before a single test ran. Ports are
-  // available everywhere — this keeps it that way.
+test('the mock household binds only to 127.0.0.1, on ports the OS picks', async (t) => {
+  // Two failures, one test. Linux gives you the whole 127.0.0.0/8 range; macOS
+  // configures 127.0.0.1 and nothing else, so a mock spread across 127.0.0.2
+  // and friends died with EADDRNOTAVAIL before a single test ran. And a fixed
+  // port range collides as soon as two test files run at once, which the test
+  // runner does by default on any machine with cores to spare.
   const { MockHousehold } = require('./mock-sonos');
   const household = new MockHousehold(['One', 'Two', 'Three']);
   t.after(() => household.close());
@@ -371,4 +372,6 @@ test('the mock household binds only to 127.0.0.1', async (t) => {
     household.players.map((player) => player.port).sort(),
     bound.map((address) => address.port).sort(),
   );
+  // Nothing fixed: every port was handed out by the operating system.
+  for (const player of household.players) assert.ok(player.port > 1024);
 });
