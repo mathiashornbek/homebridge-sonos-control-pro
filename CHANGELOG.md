@@ -8,6 +8,59 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.2.0
+
+Two adversarial reviews — one of the Sonos protocol layer, one of the settings
+interface — found twenty-four defects. None of them failed a test. These are
+the six that mattered most; the rest are written down and will follow.
+
+### Fixed
+
+- **One bad reply could delete the whole household.** The group topology is
+  built from a *single* speaker's answer, and any speaker missing from it was
+  deleted at once. A speaker that has just rebooted reports a household
+  containing only itself, and so does one on the far side of a VLAN — so
+  fourteen rooms became one, every scene failed with "room not found", and the
+  players that could have given a second opinion had been deleted too, leaving
+  nothing to recover from. A speaker now has to be absent from **two
+  consecutive** replies before it is forgotten.
+- **An imported scene file could run code in the settings page.** Scene and
+  step ids, and numeric step parameters, were written into HTML attributes
+  unescaped. Import and export are a headline feature, so a shared scene file
+  is a realistic route. Ids are now validated on the way in and replaced if
+  they are not plain identifiers; numeric parameters are coerced to numbers or
+  dropped; and the attributes are escaped as well. Names, descriptions, room
+  names and favourite titles were already escaped correctly.
+- **A scene whose id contained a quote became permanently inert** — the
+  attribute truncated, the lookup missed, and Edit, Run, Delete and the switch
+  all silently did nothing, with no way to remove it. Same fix.
+- **Dragging a scene while the search box had text destroyed the order.** The
+  new order was read off the screen, which after filtering is not the whole
+  list, and posted as though it were: the hidden scenes fell out entirely and
+  the dragged one jumped to the top of the household. The visible order is now
+  merged back into the full list, and everything hidden stays where it was.
+- **A failing bridge was presented as a healthy, empty one.** Only a bridge
+  that was completely absent counted as offline; one answering 504 because it
+  was busy sailed through, and the page then said "No scenes yet" while the
+  bridge held every real scene — one tab away from "replace everything".
+- **A parse failure took Homebridge down with it.** The SOAP and HTTP response
+  handlers ran unguarded inside an EventEmitter callback, so anything thrown
+  there was an uncaught exception rather than a failed command. Whatever a
+  speaker — or a device that merely answers on port 1400 — sends back, the most
+  it can now cost is that one call.
+- **A search matching nothing rendered a blank panel.** It now says so.
+
+### Changed
+
+- Per-speaker levels are clamped to 0–100 and rounded when they are read, not
+  only when they are typed.
+- The queue and play-mode memos are dropped when a speaker is forgotten.
+
+135 unit tests and 110 browser checks. The four new tests were each confirmed
+to fail against the old code before the fix went in.
+
+---
+
 ## 3.1.8
 
 ### Added

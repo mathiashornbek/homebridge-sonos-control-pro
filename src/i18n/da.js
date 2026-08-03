@@ -420,6 +420,7 @@ module.exports = {
   'ui.scenes.new': 'Ny scene',
   'ui.scenes.emptyTitle': 'Ingen scener endnu',
   'ui.scenes.emptyBody': 'Hent fire scener der virker med det samme, eller byg din egen fra bunden.',
+  'ui.scenes.noMatches': 'Ingen scener passer på “{query}”.',
   'ui.scenes.emptyPreset': 'Hent de fire startscener',
   'ui.scenes.emptyNew': 'Ny tom scene',
   'ui.scenes.noSteps': 'Ingen handlinger endnu',

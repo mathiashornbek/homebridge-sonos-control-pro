@@ -22,12 +22,33 @@ function newId() {
   return crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
 }
 
+/**
+ * An id we are willing to put in an HTML attribute and match on again.
+ *
+ * Ids reach us from `scenes.json`, which is hand-editable, and from imported
+ * scene files, which is a feature people are told to use. An id containing a
+ * quote used to truncate the attribute it was written into: the lookup then
+ * missed, and Edit, Run, Delete and the enable switch all silently did nothing
+ * for that scene — with no way to remove it from the interface. An id
+ * containing markup was worse.
+ *
+ * Ids are opaque; nobody types them and nobody reads them. So anything outside
+ * this alphabet is not sanitised, it is replaced.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function safeId(value) {
+  const id = String(value ?? '').trim();
+  return /^[A-Za-z0-9_.:-]{1,128}$/.test(id) ? id : newId();
+}
+
 /** Fill in every field a scene is allowed to have, so the rest of the code never guards. */
 function normalizeScene(raw, index = 0) {
   const scene = raw && typeof raw === 'object' ? raw : {};
   const fallbackName = t('scene.defaultName', { number: index + 1 });
   return {
-    id: scene.id || newId(),
+    id: safeId(scene.id),
     name: String(scene.name || fallbackName).trim() || fallbackName,
     description: String(scene.description || ''),
     enabled: scene.enabled !== false,
@@ -61,10 +82,60 @@ function normalizeSteps(raw) {
   return raw.map((step, index) => normalizeStep(step, index));
 }
 
+/**
+ * Copy a step's parameters, keeping numbers numeric.
+ *
+ * The editor writes numbers here, but the file they land in is editable and
+ * importable, and the interface renders several of these straight into HTML
+ * attributes. A string like `30"><img src=x onerror=…>` in a volume field used
+ * to become markup. A number cannot.
+ *
+ * Only fields that are already numeric in the catalogue are coerced; anything
+ * else — names, URIs, ids — is left exactly as it was, because those are
+ * escaped where they are rendered.
+ */
+const NUMERIC_PARAMS = new Set([
+  'volume',
+  'delta',
+  'amount',
+  'level',
+  'bass',
+  'treble',
+  'threshold',
+  'seconds',
+  'ms',
+  'volumeDelayMs',
+  'groupDelayMs',
+  'modeDelayMs',
+]);
+
+function normalizeParams(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const params = { ...raw };
+  for (const key of Object.keys(params)) {
+    if (NUMERIC_PARAMS.has(key) && params[key] !== '' && params[key] !== null) {
+      const value = Number(params[key]);
+      if (Number.isFinite(value)) params[key] = value;
+      else delete params[key];
+    }
+  }
+  // Per-speaker levels are a map of room name to number, and the values are
+  // rendered into two attributes each.
+  if (params.volumes && typeof params.volumes === 'object') {
+    const volumes = {};
+    for (const [name, value] of Object.entries(params.volumes)) {
+      const level = Number(value);
+      if (Number.isFinite(level)) volumes[String(name)] = Math.max(0, Math.min(100, Math.round(level)));
+    }
+    params.volumes = volumes;
+  }
+  return params;
+}
+
 function normalizeStep(raw, index = 0) {
   const step = raw && typeof raw === 'object' ? raw : {};
   return {
-    id: step.id || newId(),
+    id: safeId(step.id),
     action: String(step.action || 'pause'),
     enabled: step.enabled !== false,
     delayMs: Number.isFinite(step.delayMs) ? Math.max(0, step.delayMs) : 0,
@@ -80,7 +151,7 @@ function normalizeStep(raw, index = 0) {
             filter: step.target.filter || 'any',
           }
         : { type: 'all', names: [], coordinator: '', filter: 'any' },
-    params: step.params && typeof step.params === 'object' ? { ...step.params } : {},
+    params: normalizeParams(step.params),
   };
 }
 

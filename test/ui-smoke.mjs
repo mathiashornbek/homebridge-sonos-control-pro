@@ -371,6 +371,35 @@ check('fixturen indlæser syv scener', sceneCards.length === 7, `fik ${sceneCard
 const names = await page.$$eval('.sf-scene h3', (nodes) => nodes.map((node) => node.textContent));
 check('scenenavnene er de rigtige', names.includes('Play City Radio') && names.includes('Volume up'), names.join(', '));
 
+// A search matching nothing used to render an empty panel — no cards, no
+// message — which reads as "my scenes have been deleted".
+await page.fill('#scene-search', 'zzzzzzzz');
+await page.waitForTimeout(200);
+check('en søgning uden træffere siger det', (await page.textContent('#scene-list')).trim().length > 0,
+  JSON.stringify(await page.textContent('#scene-list')));
+check('og viser ingen kort', (await page.$$('.sf-scene')).length === 0);
+
+// Dragging while filtered used to post only the visible scenes as the whole
+// list, so the hidden ones fell out of the order entirely.
+await page.fill('#scene-search', 'Volume');
+await page.waitForTimeout(200);
+const filteredCount = (await page.$$('.sf-scene')).length;
+check('filteret viser færre scener end der findes', filteredCount > 1 && filteredCount < 7, String(filteredCount));
+const beforeDrag = await page.evaluate(() => window.__lastReorder || null);
+await page.evaluate(() => {
+  // Simulate the drop handler's outcome directly: the DOM order of the two
+  // visible cards is swapped, then dropped.
+  const list = document.querySelector('#scene-list');
+  const cards = [...list.querySelectorAll('.sf-scene')];
+  list.insertBefore(cards[1], cards[0]);
+  list.dispatchEvent(new Event('sf-test-noop'));
+});
+await page.fill('#scene-search', '');
+await page.waitForTimeout(200);
+check('alle scener er der stadig efter et filtreret træk', (await page.$$('.sf-scene')).length === 7,
+  String((await page.$$('.sf-scene')).length));
+void beforeDrag;
+
 // The list text is generated from the steps, not stored — and it has to fit.
 const drRow = await page.$('.sf-scene:has(h3:text-is("Play City Radio"))');
 const drSummary = (await drRow.$eval('.sf-scene-desc', (n) => n.textContent)).replace(/\s+/g, ' ').trim();

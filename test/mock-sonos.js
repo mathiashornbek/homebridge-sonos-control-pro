@@ -374,7 +374,13 @@ class MockHousehold {
   /** @private */
   topologyXml() {
     const groups = new Map();
-    for (const player of this.players) {
+    // A speaker that has just rebooted, or is on the wrong side of a VLAN,
+    // reports a household containing only itself. Set `reportsOnly` to a uuid
+    // to make every speaker answer with that partial view.
+    const visible = this.reportsOnly
+      ? this.players.filter((player) => player.uuid === this.reportsOnly)
+      : this.players;
+    for (const player of visible) {
       const coordinator = this.coordinatorOf(player.uuid);
       if (!groups.has(coordinator)) groups.set(coordinator, []);
       groups.get(coordinator).push(player);

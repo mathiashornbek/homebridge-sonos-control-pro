@@ -272,30 +272,45 @@ function sendSoap({ host, service, action, args = {}, timeout = DEFAULT_TIMEOUT,
         response.on('error', onBroken);
         response.on('aborted', () => onBroken(new Error(t('sonos.replyAborted'))));
 
+        // Everything from here on is wrapped, because this runs inside an
+        // EventEmitter callback: a throw here is not a rejected promise, it is
+        // an uncaught exception that takes Homebridge down. Whatever a speaker
+        // — or a device that merely answers on port 1400 — sends back, the
+        // worst it may cost is this one command.
         response.on('end', () => {
           if (settled) return;
           cleanup();
-          const payload = Buffer.concat(chunks).toString('utf8');
-          const document = parseXml(payload);
+          try {
+            const payload = Buffer.concat(chunks).toString('utf8');
+            const document = parseXml(payload);
 
-          if (response.statusCode !== 200) {
-            const fault = find(document, 'UPnPError');
-            const code = fault ? Number(text(fault, 'errorCode')) : undefined;
-            const detail = UPNP_ERRORS[code] || text(document, 'faultstring') || 'unknown fault';
+            if (response.statusCode !== 200) {
+              const fault = find(document, 'UPnPError');
+              const code = fault ? Number(text(fault, 'errorCode')) : undefined;
+              const detail = UPNP_ERRORS[code] || text(document, 'faultstring') || 'unknown fault';
+              reject(
+                new SonosError(`${service}.${action} failed on ${host}: ${detail}`, {
+                  host,
+                  service,
+                  action,
+                  statusCode: response.statusCode,
+                  upnpErrorCode: code,
+                }),
+              );
+              return;
+            }
+
+            const responseNode = find(document, `${action}Response`) || find(document, 'Body');
+            resolve(responseNode || document);
+          } catch (error) {
             reject(
-              new SonosError(`${service}.${action} failed on ${host}: ${detail}`, {
+              new SonosError(`${service}.${action} sent something unreadable from ${host}: ${error.message}`, {
                 host,
                 service,
                 action,
-                statusCode: response.statusCode,
-                upnpErrorCode: code,
               }),
             );
-            return;
           }
-
-          const responseNode = find(document, `${action}Response`) || find(document, 'Body');
-          resolve(responseNode || document);
         });
       },
     );
@@ -371,13 +386,19 @@ function httpGet(host, path, timeout = 5000, port = SONOS_PORT) {
         };
         response.on('error', onBroken);
         response.on('aborted', () => onBroken(new Error('was cut short')));
+        // Wrapped for the same reason as sendSoap's: a throw inside an
+        // EventEmitter callback is an uncaught exception, not a rejection.
         response.on('end', () => {
           clearTimeout(timer);
-          if (response.statusCode !== 200) {
-            reject(new Error(`GET ${path} on ${host} returned ${response.statusCode}`));
-            return;
+          try {
+            if (response.statusCode !== 200) {
+              reject(new Error(`GET ${path} on ${host} returned ${response.statusCode}`));
+              return;
+            }
+            resolve(Buffer.concat(chunks).toString('utf8'));
+          } catch (error) {
+            reject(new Error(`GET ${path} on ${host} could not be read: ${error.message}`));
           }
-          resolve(Buffer.concat(chunks).toString('utf8'));
         });
       },
     );

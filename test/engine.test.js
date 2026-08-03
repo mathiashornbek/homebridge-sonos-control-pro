@@ -1545,6 +1545,39 @@ test('two hundred random presses leave a consistent household and no leaks', asy
   assert.equal(h.system.coordinatorFor(h.system.resolve('Study')).name, 'Kitchen', 'model agrees with the wire');
 });
 
+test('one speaker reporting a household of one does not delete the other thirteen', async (t) => {
+  // The picture comes from a single speaker, and a speaker that has just
+  // rebooted reports only itself for a few seconds. Deleting on that first
+  // answer emptied the household: every scene then failed with "room not
+  // found", and the players that could have given a second opinion were gone
+  // too, so nothing was left to recover from.
+  const h = await harness();
+  t.after(() => h.close());
+
+  const kitchen = h.household.byName('Kitchen');
+  assert.equal(h.system.list().length, ROOMS.length, 'all present to begin with');
+
+  h.household.reportsOnly = kitchen.uuid;
+  await h.system.refreshTopology(undefined, { maxAgeMs: 0 });
+
+  assert.equal(
+    h.system.list().length,
+    ROOMS.length,
+    'one bad answer must not empty the household',
+  );
+  assert.ok(h.system.resolve('Bedroom'), 'and the rooms still resolve, so scenes still run');
+
+  // A speaker really gone is still forgotten — on the second answer, not the first.
+  await h.system.refreshTopology(undefined, { maxAgeMs: 0 });
+  assert.equal(h.system.list().length, 1, 'two consecutive absences is gone');
+  assert.equal(h.system.list()[0].name, 'Kitchen');
+
+  // …and it comes back when the household does.
+  h.household.reportsOnly = null;
+  await h.system.refreshTopology(undefined, { maxAgeMs: 0 });
+  assert.equal(h.system.list().length, ROOMS.length, 'and it recovers');
+});
+
 test('the household model never contradicts the speakers after a scene', async (t) => {
   const h = await harness();
   t.after(() => h.close());

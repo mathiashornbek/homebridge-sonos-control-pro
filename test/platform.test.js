@@ -431,6 +431,78 @@ test('a household with no seeds at all is the same, quiet, story', async () => {
   assert.equal(warnings.length, 1);
 });
 
+// ------------------------------------------- hostile and hand-edited scenes
+
+test('an id that would break out of an HTML attribute is replaced', () => {
+  // Ids reach the store from an imported scene file, which is a feature people
+  // are told to use. They are then written into data-id attributes. An id with
+  // a quote in it truncated the attribute, so the lookup missed and Edit, Run,
+  // Delete and the switch all silently did nothing — with no way to remove the
+  // scene from the interface. An id with markup in it was worse.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-hostile-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([
+    { id: 'a"b', name: 'Quote' },
+    { id: 'bad" onmouseover="window.x=1" data-y="', name: 'Handler' },
+    { id: '<img src=x onerror=alert(1)>', name: 'Markup' },
+    { id: 'perfectly-fine_ID.1:2', name: 'Innocent' },
+  ]);
+
+  const byName = Object.fromEntries(store.list().map((scene) => [scene.name, scene]));
+  assert.equal(byName.Innocent.id, 'perfectly-fine_ID.1:2', 'a sane id is left alone');
+  for (const name of ['Quote', 'Handler', 'Markup']) {
+    assert.match(byName[name].id, /^[A-Za-z0-9_.:-]+$/, `${name} kept a dangerous id`);
+    assert.doesNotMatch(byName[name].id, /["'<>]/);
+  }
+  // Replaced, not merely stripped — two hostile ids must not collide.
+  assert.notEqual(byName.Quote.id, byName.Handler.id);
+});
+
+test('a step parameter that should be a number is made one', () => {
+  // The interface renders these straight into HTML attributes. A volume of
+  // `30"><img src=x onerror=…>` used to become markup the moment the step was
+  // expanded — no interaction needed.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-params-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([
+    {
+      name: 'Hostile',
+      steps: [
+        {
+          action: 'setVolume',
+          params: {
+            volume: '30"><img src=x onerror="window.x=1">',
+            delta: '5" autofocus onfocus="window.y=1" x="',
+            volumes: { Kitchen: '10" onmouseover="window.z=1" x="', Study: '42', Garage: 'nonsense' },
+            // Not a number, and must survive untouched — it is escaped where
+            // it is rendered, and it is legitimately a string.
+            uri: 'x-rincon-mp3radio://example.com/stream?a="b"',
+          },
+        },
+      ],
+    },
+  ]);
+
+  const { params } = store.list()[0].steps[0];
+  assert.equal(params.volume, undefined, 'an unparseable volume is dropped, not kept as text');
+  assert.equal(params.delta, undefined);
+  assert.deepEqual(params.volumes, { Study: 42 }, 'only the levels that are numbers survive');
+  assert.equal(typeof params.volumes.Study, 'number');
+  assert.equal(params.uri, 'x-rincon-mp3radio://example.com/stream?a="b"', 'strings are left alone');
+});
+
+test('a level outside 0–100 is clamped rather than trusted', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-clamp-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([
+    { name: 'Loud', steps: [{ action: 'groupAndPlay', params: { volumes: { A: 900, B: -5, C: 33.7 } } }] },
+  ]);
+  assert.deepEqual(store.list()[0].steps[0].params.volumes, { A: 100, B: 0, C: 34 });
+});
+
 // --------------------------------------------------- what the verifier checks
 
 test('config.schema.json is the shape Homebridge and the verifier expect', () => {

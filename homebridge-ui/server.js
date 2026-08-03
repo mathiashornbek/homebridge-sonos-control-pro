@@ -160,9 +160,21 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
       this.proxy('GET', '/library'),
     ]);
 
-    if (!status) {
+    // `!status` only catches a bridge that is not there. A bridge that answers
+    // 504 because it is busy, or any 4xx/5xx, used to sail through here as
+    // healthy — and then `scenes?.body?.scenes || []` served an empty list, so
+    // the page said "No scenes yet" while the bridge held every real scene.
+    // One tab away is "replace everything", which would have made that true.
+    if (!status || status.status >= 400) {
       this.store.load();
-      return { ...base, connected: false, scenes: this.store.list(), players: [], groups: [], library: { favorites: [], playlists: [], radio: [] } };
+      return {
+        ...base,
+        connected: false,
+        scenes: this.store.list(),
+        players: [],
+        groups: [],
+        library: { favorites: [], playlists: [], radio: [] },
+      };
     }
 
     return {

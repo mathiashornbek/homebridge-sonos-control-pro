@@ -125,6 +125,13 @@ class SonosSystem extends EventEmitter {
      */
     this._playModeMemo = new Map();
     this.playModeMemoTtlMs = 30000;
+    /**
+     * Players absent from the last topology reply but not yet given up on.
+     * One missing sighting is a rebooting speaker; two is a speaker that has
+     * gone.
+     * @type {Set<string>}
+     */
+    this._missing = new Set();
     this._topologyTimer = null;
     this._rediscoverTimer = null;
     this._discovering = null;
@@ -452,9 +459,33 @@ class SonosSystem extends EventEmitter {
       }
     }
 
-    // Drop players the household no longer reports (removed, or permanently off).
+    // Drop players the household no longer reports — but not on one answer.
+    //
+    // This whole picture comes from a single speaker, and a speaker that has
+    // just rebooted reports only itself for a few seconds. So does one on the
+    // wrong side of a VLAN, or in a household that has briefly split. Deleting
+    // on the first sighting meant every scene in that window failed with "room
+    // not found" — and worse, it removed the very players the next refresh
+    // would have asked for a second opinion, so nothing was left to recover
+    // from.
+    //
+    // A player has to be absent from two consecutive replies to be forgotten.
+    // The first absence is recorded and nothing else happens.
     for (const uuid of [...this.players.keys()]) {
-      if (!seen.has(uuid)) this.players.delete(uuid);
+      if (seen.has(uuid)) {
+        this._missing.delete(uuid);
+        continue;
+      }
+      if (this._missing.has(uuid)) {
+        this.players.delete(uuid);
+        this._missing.delete(uuid);
+        // Nothing should outlive the player it describes.
+        this._queueMemo.delete(uuid);
+        this._playModeMemo.delete(uuid);
+      } else {
+        this._missing.add(uuid);
+        this.log.debug?.(`${this.players.get(uuid)?.name || uuid} missing from this topology reply`);
+      }
     }
 
     this.groups = groups;

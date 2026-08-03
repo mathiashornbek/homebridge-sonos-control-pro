@@ -14,7 +14,7 @@
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?color=4f46e5" alt="downloads" /></a>
   <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/badge/licence-MIT-4f46e5" alt="MIT licence" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 and 2.x" />
-  <img src="https://img.shields.io/badge/tests-131%20%2B%20106-4f46e5" alt="131 unit tests, 106 browser checks" />
+  <img src="https://img.shields.io/badge/tests-135%20%2B%20110-4f46e5" alt="135 unit tests, 110 browser checks" />
 </p>
 
 ---
@@ -301,8 +301,8 @@ The settings page shows two fields on purpose. These are still read from `config
 Issues and pull requests are very welcome. The test suite is the contract:
 
 ```bash
-npm test        # 131 unit and integration tests against a full mock Sonos household
-npm run test:ui # 106 checks driving the real settings UI in Chromium
+npm test        # 135 unit and integration tests against a full mock Sonos household
+npm run test:ui # 110 checks driving the real settings UI in Chromium
 ```
 
 The mock household in `test/mock-sonos.js` speaks real SOAP over real HTTP on loopback, with configurable latency, real queue update IDs and speakers that can appear mid-run — so the tests exercise the actual protocol, not a stub of it. 🧪

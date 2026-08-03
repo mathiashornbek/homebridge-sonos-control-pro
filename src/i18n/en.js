@@ -418,6 +418,7 @@ module.exports = {
   'ui.scenes.new': 'New scene',
   'ui.scenes.emptyTitle': 'No scenes yet',
   'ui.scenes.emptyBody': 'Load four scenes that work straight away, or build your own from scratch.',
+  'ui.scenes.noMatches': 'No scenes match “{query}”.',
   'ui.scenes.emptyPreset': 'Load the four starter scenes',
   'ui.scenes.emptyNew': 'New empty scene',
   'ui.scenes.noSteps': 'No actions yet',

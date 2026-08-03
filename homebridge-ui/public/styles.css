@@ -686,3 +686,7 @@ input[type="range"]::-moz-range-thumb {
 .sf-manual .sf-help { margin: 0 0 12px; }
 .sf-manual-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .sf-manual-row .sf-input { flex: 1 1 240px; min-width: 0; }
+
+/* "No scenes match …" — a filter that finds nothing must say so, not render
+   an empty panel that reads as data loss. */
+.sf-empty-line { margin: 24px 4px; color: var(--sf-muted); }
