@@ -43,6 +43,19 @@ const CONTAINER_PREFIXES = ['x-rincon-cpcontainer:', 'x-rincon-playlist:', 'file
  */
 
 /**
+ * Is this the class a favourites *list entry* carries, rather than the class of
+ * the thing it points at?
+ *
+ * Sonos files everything in "Sonos Favourites" under a wrapper class. It is
+ * never a valid class to enqueue with, and passing it on gets the item refused.
+ *
+ * @param {string} upnpClass
+ */
+function isFavoriteWrapper(upnpClass) {
+  return String(upnpClass || '').toLowerCase().includes('sonos-favorite');
+}
+
+/**
  * Decide how a resource has to be played.
  * @param {string} uri
  * @param {string} upnpClass
@@ -81,6 +94,12 @@ function parseDidl(didl) {
       const inner = parseXml(metadata);
       const innerClass = text(inner, 'class', '');
       if (innerClass) upnpClass = innerClass;
+    } else if (isFavoriteWrapper(upnpClass)) {
+      // Without `resMD`, the only class on the node is the favourites-list
+      // wrapper — `object.itemobject.item.sonos-favorite`. That is what the
+      // item is *filed as*, not what it *is*, and a player refuses it as an
+      // enqueue class. Better to have none and derive from the URI.
+      upnpClass = '';
     }
     const { isStream, isContainer } = classify(uri, upnpClass);
 
@@ -129,6 +148,15 @@ function cdudnFor(uri) {
   if (lower.startsWith('x-sonosapi-stream:') || lower.startsWith('x-sonosapi-radio:')) {
     return 'SA_RINCON65031_';
   }
+  // A music-service item names its service in the URI: `…?sid=9&…&sn=7`.
+  // `RINCON_AssociatedZPUDN` is the local-content token, so handing it over for
+  // a Spotify container asks the player to look for that album on the speaker
+  // itself. When the URI tells us which service it is, say so.
+  const sid = /[?&]sid=(\d+)/i.exec(String(uri || ''));
+  if (sid) {
+    const sn = /[?&]sn=(\d+)/i.exec(String(uri || ''));
+    return `SA_RINCON${sid[1]}_X_#Svc${sid[1]}-${sn ? sn[1] : '0'}-Token`;
+  }
   return 'RINCON_AssociatedZPUDN';
 }
 
@@ -158,4 +186,13 @@ function buildDidl({ title, uri = '', isContainer = false, upnpClass, id = '-1',
   );
 }
 
-module.exports = { parseDidl, buildDidl, classify, classFor, cdudnFor, STREAM_PREFIXES, CONTAINER_PREFIXES };
+module.exports = {
+  parseDidl,
+  buildDidl,
+  classify,
+  classFor,
+  cdudnFor,
+  isFavoriteWrapper,
+  STREAM_PREFIXES,
+  CONTAINER_PREFIXES,
+};

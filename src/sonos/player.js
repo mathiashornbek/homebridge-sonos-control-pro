@@ -2,7 +2,7 @@
 
 const { soapRequest, httpGet, SONOS_PORT } = require('./soap');
 const { parseXml, find, text } = require('./xml');
-const { parseDidl, buildDidl } = require('./didl');
+const { parseDidl, buildDidl, classify, isFavoriteWrapper } = require('./didl');
 const { t } = require('../i18n');
 
 const PLAY_MODES = {
@@ -49,7 +49,17 @@ function encodePlayMode(shuffle, repeat) {
  * mute the whole house and report success, which is the worst possible answer.
  */
 function clampVolume(value) {
-  if (value === '' || value === null || value === undefined) {
+  // `Number(' ')`, `Number([])` and `Number(false)` are all 0, so a
+  // whitespace-only field used to sail through as "mute the whole house, and
+  // report success" — the exact answer the paragraph above says must never
+  // happen. Only a string or a number is a volume at all, and a string has to
+  // have something in it.
+  const blank =
+    value === null ||
+    value === undefined ||
+    (typeof value === 'string' && value.trim() === '') ||
+    (typeof value !== 'string' && typeof value !== 'number');
+  if (blank) {
     throw new Error(t('error.noVolume'));
   }
   const number = Math.round(Number(value));
@@ -253,6 +263,20 @@ class SonosPlayer {
   async playItem(playable) {
     const { uri } = playable;
     if (!uri) throw new Error(t('error.nothingToPlay'));
+
+    // Ask the URI, do not merely believe the caller.
+    //
+    // `classify()` exists for exactly this decision and was called only when
+    // parsing a favourite — never here. The raw-URI action hardcodes
+    // `isContainer: false`, so pasting an `x-rincon-cpcontainer:` URI sent
+    // SetAVTransportURI where the player needed a queue, and answered 714 or
+    // simply nothing. The caller's flag still wins when the URI says nothing
+    // either way, because a favourite's own metadata knows best.
+    const derived = classify(uri, playable.upnpClass);
+    const isContainer = derived.isStream
+      ? false
+      : derived.isContainer || Boolean(playable.isContainer);
+
     // Saved Sonos queues carry no `r:resMD` at all and must be enqueued with
     // empty metadata; inventing some makes the player reject them.
     const isSavedQueue = String(uri).startsWith('file:///jffs/settings/savedqueues.rsq');
@@ -263,11 +287,13 @@ class SonosPlayer {
         : buildDidl({
             title: playable.title || 'Stream',
             uri,
-            isContainer: Boolean(playable.isContainer),
-            upnpClass: playable.upnpClass,
+            isContainer,
+            // A favourites-list wrapper class is what the item is filed as,
+            // not what it is, and a player refuses it.
+            upnpClass: isFavoriteWrapper(playable.upnpClass) ? '' : playable.upnpClass,
           }));
 
-    if (playable.isContainer) {
+    if (isContainer) {
       await this.clearQueue();
       await this.addToQueue(uri, metadata, { position: 0 });
       await this.setAVTransportURI(`x-rincon-queue:${this.uuid}#0`, '');

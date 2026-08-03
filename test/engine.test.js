@@ -21,6 +21,23 @@ const ROOMS = fixture.ROOMS;
 // machine's locale happens to make the default resolve to.
 setLanguage('da');
 
+/**
+ * Wait until `condition` is true, or give up.
+ *
+ * A fixed `setTimeout` is a guess about how fast the machine is, and on a
+ * machine running five test files at once the guess is wrong often enough to
+ * matter — a scene that was supposed to still be running has already finished,
+ * and the test fails for a reason that has nothing to do with the plugin.
+ */
+async function waitFor(condition, { timeoutMs = 4000, label = 'condition' } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
 /** Spin up a household, a system pointed at it, a store and a runner. */
 async function harness({ scenes = fixture.SCENES, fast = true } = {}) {
   const household = new MockHousehold(ROOMS);
@@ -908,8 +925,15 @@ test('starting a second music scene cancels the first instead of racing it', asy
   const background = h.sceneByName('Background music');
   const radio = h.sceneByName('Play City Radio');
 
+  // Enough latency that the first scene cannot possibly finish before the
+  // second is pressed — the point of the test is what happens when two are in
+  // flight, and with instant replies that overlap is a matter of luck.
+  h.household.latencyMs = 6;
+
   const first = h.runner.run(background.id, { trigger: 'test' });
-  await new Promise((resolve) => setTimeout(resolve, 5));
+  // Press the second once the first is genuinely running, rather than after a
+  // fixed delay that a loaded machine turns into "after the first finished".
+  await waitFor(() => h.runner.running.size >= 1, { label: 'the first scene to start' });
   const second = h.runner.run(radio.id, { trigger: 'test' });
 
   const [a, b] = await Promise.all([first, second]);
@@ -1167,7 +1191,10 @@ test('hammering two different music scenes leaves a consistent household', async
     await new Promise((resolve) => setTimeout(resolve, 3));
   }
   await Promise.all(runs);
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  // Wait for the runner to unregister rather than guessing how long that takes:
+  // on a loaded machine a fixed settle is a coin toss, and the assertion below
+  // is exactly the one it would lose.
+  await waitFor(() => h.runner.running.size === 0, { label: 'every run to finish' });
 
   const kitchen = h.household.byName('Kitchen');
   assert.equal(h.runner.running.size, 0, 'no run is stuck');
@@ -1213,7 +1240,10 @@ test('a stateful switch flicked on and off ends in the state it was left', async
     await new Promise((resolve) => setTimeout(resolve, 4));
   }
   await Promise.all(runs);
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  // Wait for the runner to unregister rather than guessing how long that takes:
+  // on a loaded machine a fixed settle is a coin toss, and the assertion below
+  // is exactly the one it would lose.
+  await waitFor(() => h.runner.running.size === 0, { label: 'every run to finish' });
 
   assert.equal(h.runner.running.size, 0);
   assert.equal(h.household.byName('Kitchen').transportState, 'PLAYING', 'it was left on');
@@ -1381,7 +1411,10 @@ test('a cancelled scene cannot beat the one that replaced it', async (t) => {
   const radio = h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'HomeKit' });
 
   const [cancelled, winner] = await Promise.all([background, radio]);
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  // Wait for the runner to unregister rather than guessing how long that takes:
+  // on a loaded machine a fixed settle is a coin toss, and the assertion below
+  // is exactly the one it would lose.
+  await waitFor(() => h.runner.running.size === 0, { label: 'every run to finish' });
 
   assert.equal(winner.ok, true, winner.error || '');
   assert.equal(cancelled.ok, false, 'the abandoned run reports itself as abandoned');
@@ -1404,7 +1437,10 @@ test('a chain of impatient presses settles on the last one', async (t) => {
     await new Promise((resolve) => setTimeout(resolve, 40));
   }
   await Promise.all(runs);
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  // Wait for the runner to unregister rather than guessing how long that takes:
+  // on a loaded machine a fixed settle is a coin toss, and the assertion below
+  // is exactly the one it would lose.
+  await waitFor(() => h.runner.running.size === 0, { label: 'every run to finish' });
 
   const kitchen = h.household.byName('Kitchen');
   assert.equal(h.runner.running.size, 0, 'nothing stuck');
@@ -1597,4 +1633,50 @@ test('the household model never contradicts the speakers after a scene', async (
       );
     }
   }
+});
+
+// ------------------------------------------- a household that does not answer
+
+test('a topology that nobody answers is not re-attempted on every call', async (t) => {
+  // The failure path returned without recording the attempt, so the freshness
+  // guard never suppressed anything: a household where nothing answers paid the
+  // full fan-out on every single call. The speakers view took 25 seconds, and
+  // then took 25 seconds again.
+  const h = await harness();
+  t.after(() => h.close());
+
+  // Everyone stops answering.
+  h.household.failEverything = true;
+
+  const first = Date.now();
+  await h.system.refreshTopology(undefined, { maxAgeMs: 0 });
+  const firstMs = Date.now() - first;
+
+  const second = Date.now();
+  await h.system.refreshTopology(undefined, { maxAgeMs: 2000 });
+  const secondMs = Date.now() - second;
+
+  assert.ok(
+    secondMs < Math.max(50, firstMs / 4),
+    `the second attempt cost ${secondMs} ms after the first cost ${firstMs} ms — the guard is not working`,
+  );
+});
+
+test('a speaker that moves port is followed, whichever path notices', async (t) => {
+  // _upsert copied host, name and model but not port, while the topology
+  // refresh did copy it — so the two paths described the same speaker
+  // differently, and one of them was talking to the wrong socket.
+  const h = await harness();
+  t.after(() => h.close());
+
+  const { SonosPlayer } = require('../src/sonos/player');
+  const kitchen = h.system.resolve('Kitchen');
+  const originalPort = kitchen.port;
+
+  const moved = new SonosPlayer({ host: kitchen.host, port: originalPort + 1 });
+  moved.uuid = kitchen.uuid;
+  moved.name = kitchen.name;
+  h.system._upsert(moved);
+
+  assert.equal(h.system.resolve('Kitchen').port, originalPort + 1, 'rediscovery must carry the port over');
 });

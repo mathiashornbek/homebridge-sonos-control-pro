@@ -114,6 +114,8 @@ function parseXml(xml) {
   if (typeof xml !== 'string' || xml.length === 0) return root;
 
   const stack = [root];
+  /** Tag name → the stack depths it is currently open at, deepest last. */
+  const openDepths = new Map();
   let i = 0;
   const len = xml.length;
 
@@ -163,12 +165,25 @@ function parseXml(xml) {
 
     if (raw[0] === '/') {
       // Closing tag: unwind to the matching open element if we can find one.
+      //
+      // This used to scan the whole stack for every close. On well-formed XML
+      // that is O(1), because the match is always on top — but on input where
+      // opens are never closed it is O(n²). 40 000 HTML void tags followed by
+      // junk closes took 13.5 seconds of blocked event loop, and HTML is
+      // exactly what a device that is not a Sonos speaker returns on port 1400.
+      //
+      // `openDepths` remembers where each name is open, so the match is a
+      // lookup. Entries left behind by an unwind are discarded lazily, which
+      // costs one pop per element over the whole parse.
       const name = raw.slice(1).trim();
-      for (let depth = stack.length - 1; depth > 0; depth -= 1) {
-        if (stack[depth].name === name) {
-          stack.length = depth;
-          break;
+      const depths = openDepths.get(name);
+      if (depths) {
+        while (depths.length > 0) {
+          const depth = depths[depths.length - 1];
+          if (depth > 0 && depth < stack.length && stack[depth].name === name) break;
+          depths.pop();
         }
+        if (depths.length > 0) stack.length = depths.pop();
       }
       continue;
     }
@@ -180,7 +195,15 @@ function parseXml(xml) {
     const node = makeNode(nameMatch[1]);
     node.attrs = parseAttributes(body.slice(nameMatch[1].length));
     stack[stack.length - 1].children.push(node);
-    if (!selfClosing) stack.push(node);
+    if (!selfClosing) {
+      stack.push(node);
+      let depths = openDepths.get(node.name);
+      if (!depths) {
+        depths = [];
+        openDepths.set(node.name, depths);
+      }
+      depths.push(stack.length - 1);
+    }
   }
 
   return root;
@@ -239,10 +262,23 @@ function children(node, name) {
  */
 function find(node, name) {
   if (!node) return null;
-  for (const candidate of node.children) {
-    if (candidate.name === name || candidate.local === name) return candidate;
-    const nested = find(candidate, name);
-    if (nested) return nested;
+  // Iterative, not recursive: `parseXml` happily builds a document thousands of
+  // elements deep, and a recursive walk of one overflows the call stack. That
+  // throw happens inside a response handler, where it used to be an uncaught
+  // exception rather than a failed command.
+  //
+  // The explicit stack is walked so that children are visited in order, which
+  // keeps this a depth-first search in document order, as before.
+  // Children pushed in reverse so the first is popped first: that makes this
+  // pre-order, in document order, exactly as the recursive version was.
+  const stack = [];
+  for (let index = node.children.length - 1; index >= 0; index -= 1) stack.push(node.children[index]);
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current.name === name || current.local === name) return current;
+    for (let index = current.children.length - 1; index >= 0; index -= 1) {
+      stack.push(current.children[index]);
+    }
   }
   return null;
 }
@@ -256,13 +292,16 @@ function find(node, name) {
 function findAll(node, name) {
   const out = [];
   if (!node) return out;
-  const walk = (current) => {
-    for (const candidate of current.children) {
-      if (candidate.name === name || candidate.local === name) out.push(candidate);
-      walk(candidate);
+  // Iterative for the same reason as `find`, and in the same order.
+  const stack = [];
+  for (let index = node.children.length - 1; index >= 0; index -= 1) stack.push(node.children[index]);
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current.name === name || current.local === name) out.push(current);
+    for (let index = current.children.length - 1; index >= 0; index -= 1) {
+      stack.push(current.children[index]);
     }
-  };
-  walk(node);
+  }
   return out;
 }
 

@@ -14,7 +14,8 @@
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?color=4f46e5" alt="downloads" /></a>
   <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/badge/licens-MIT-4f46e5" alt="MIT-licens" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 og 2.x" />
-  <img src="https://img.shields.io/badge/tests-135%20%2B%20110-4f46e5" alt="135 tests, 110 browserkontroller" />
+  <img src="https://img.shields.io/badge/Node-22%20%7C%2024%20%7C%2026-4f46e5" alt="Node 22, 24 og 26" />
+  <img src="https://img.shields.io/badge/tests-148%20%2B%20114-4f46e5" alt="148 tests, 114 browserkontroller" />
 </p>
 
 ---
@@ -301,11 +302,13 @@ Indstillingssiden viser to felter med vilje. Disse læses stadig fra `config.jso
 Issues og pull requests er meget velkomne. Testsuiten er kontrakten:
 
 ```bash
-npm test        # 135 tests mod en komplet efterligning af en Sonos-husstand
-npm run test:ui # 110 kontroller der styrer den rigtige brugerflade i Chromium
+npm test        # 148 tests mod en komplet efterligning af en Sonos-husstand
+npm run test:ui # 114 kontroller der styrer den rigtige brugerflade i Chromium
 ```
 
-Efterligningen i `test/mock-sonos.js` taler ægte SOAP over ægte HTTP på loopback, med indstillelig forsinkelse, rigtige kø-id'er og højttalere der kan dukke op midt i en kørsel — så testene afprøver den faktiske protokol, ikke en attrap. 🧪
+Begge kører i CI på **Node 22, 24 og 26** — de to versioner Homebridge understøtter, plus Current, så en ændring i Node dukker op her før den dukker op i nogens hus.
+
+Efterligningen i `test/mock-sonos.js` taler ægte SOAP over ægte HTTP på loopback, med indstillelig forsinkelse, rigtige kø-id'er og højttalere der kan dukke op midt i en kørsel — så testene afprøver den faktiske protokol, ikke en attrap. 🧪 Den rører aldrig det netværk, suiten køres fra: søgningen er stubbet overalt, så `npm test` i et hus med rigtige Sonos-højttalere hverken finder dem eller taler med dem.
 
 ---
 

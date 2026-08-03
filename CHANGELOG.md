@@ -8,6 +8,146 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.3.0
+
+The rest of the review. 3.2.0 fixed the six worst findings; this closes the
+remaining eighteen. Every one is now covered by a test, and the suite has grown
+from 131 to 148 because the review's real conclusion was not the list of bugs —
+it was that the tests only ever exercised the happy path against a mock that
+always answers correctly.
+
+### Discovery
+
+- **Anything that answered the search was treated as a speaker.** The comment
+  claimed only ZonePlayer answers were accepted; the filter did not exist.
+  Routers, NAS boxes and televisions reply to any M-SEARCH, and with the early
+  exit a router answering in 20 ms ended discovery before a single real speaker
+  had replied: **zero speakers found**, four seconds spent, and a warning that
+  blamed addresses which were not involved. Sonos is now identified by its USN,
+  its search target or its server header.
+- **The search asked for replies over three seconds and hung up after four
+  tenths of one.** Spreading replies over that window is what `MX` is *for*, so
+  every speaker that obeyed it answered into a closed socket — and the second
+  burst, which exists because UDP is lossy, went out at the same moment the
+  socket closed. The window asked for now matches the time actually spent
+  listening, and the second burst goes out well inside it.
+- **An IPv6 address was read as `[fd00`,** and an uppercase `HTTP://` was
+  rejected outright. Each cost a full discovery timeout per speaker.
+
+### A household that answers slowly, or wrongly
+
+- **A failed topology read was never recorded as an attempt,** so the freshness
+  guard suppressed nothing and every call paid the whole fan-out again. With
+  nothing on the network answering, the speaker view took 25 seconds — and then
+  took 25 seconds again.
+- **Volume and mute were read one after the other** inside an object literal
+  that looks parallel and is not, so an unreachable speaker cost two timeouts
+  where one would do.
+- **A rediscovered speaker kept its old port** while the topology refresh
+  updated it, so the two paths disagreed about where the same speaker lived.
+
+### Playback
+
+- **A favourite with no metadata was sent back with the class Sonos files it
+  under.** `object.itemobject.item.sonos-favorite` says what an item is *listed
+  as*, not what it *is*, and a player refuses it. It is now dropped so the class
+  is derived from the URI.
+- **A music-service item was handed the token for local content.** Asking a
+  speaker to find a Spotify album on itself does not work; the service is named
+  in the URI and is now read from it.
+- **`playItem` never asked `classify()`,** which exists for exactly the
+  question it was guessing at. Pasting a container URI sent the command that
+  plays a stream, and the player answered 714 or nothing at all.
+- **A volume of `" "` muted every chosen speaker and reported success.**
+  `Number(' ')` is 0. This is the case the function's own comment calls the
+  worst possible answer.
+
+### The XML parser
+
+- **A wall of unclosed tags took 13.5 seconds of blocked event loop.** The
+  closing-tag scan walked the whole stack for every close: fine on well-formed
+  XML, quadratic on anything else — and anything else is precisely what a device
+  that is not a Sonos speaker returns on port 1400. Now **60 ms**.
+- **Searching a deep document overflowed the call stack.** `parseXml` will
+  happily build one tens of thousands of elements deep; `find` and `findAll`
+  recursed into it. Both are iterative now, in the same document order.
+
+### The settings page
+
+- **The five-second refresh fought whoever was using it.** It replaced the
+  whole speaker grid, so a volume slider held mid-drag lost the node under the
+  pointer and the drag died. It now waits for the hand to leave.
+- **The level for adopting new speakers reset to 12 every five seconds** — and
+  the button read the page, so speakers were adopted at 12 rather than at the
+  level that had been set.
+- **A slow answer overwrote a newer one.** Four things trigger that refresh, so
+  two were routinely in flight; the loser won by finishing last.
+- **Four handlers changed the page before saving and never changed it back.**
+  A failed write left the switch in its new position, the page disagreeing with
+  the disk, and an uncaught error in the console.
+- **Activity and Backups rendered as blank white space** when the bridge was
+  down, which reads as "there is nothing here" rather than "I cannot see". One
+  malformed history entry blanked the whole tab, taking the good entries with
+  it.
+- **The undo offered after deleting was withdrawn on the fourth delete.** Three
+  toasts is the cap, and when all three carried an undo the oldest was dropped
+  anyway.
+- **A step's level control showed a number the scene had not stored** — the
+  slider read 10, the saved step held nothing, and the card then said so.
+- **An unset amount rendered as `NaN %`.**
+- **Trying a new scene created it permanently** while the editor still claimed
+  unsaved changes and closed without asking. It says what it did now.
+- **Toggling a room off and back on left the editor permanently "unsaved"**,
+  because the comparison is on JSON and the list had reordered.
+- **Album art was escaped but not checked.** Escaping makes a value safe to sit
+  in an attribute and says nothing about what it means; `javascript:` passes
+  through it untouched.
+- **A double-click on a button that opens a dialog cancelled it instantly** —
+  the second press landed on the backdrop that had just appeared.
+- **The frame was measured before the panel had loaded,** leaving a long
+  activity list clipped until the tab was switched twice.
+- **The address panel forced itself open on every refresh,** so it could not be
+  closed while no speakers were found.
+- **Saving addresses failed silently, and did not save at all** when the
+  platform block was missing from `config.json` — the addresses were used and
+  then vanished at the next restart. Saving now happens first and works with
+  the bridge down, which is the situation the field exists for.
+
+### Also
+
+- The settings header drew a second, older version of the icon's mark: a
+  rounder switch, the knob in a different place, two sound waves where the icon
+  has three. Beside the icon it read as a different logo. It reuses the icon's
+  own geometry now, and a test compares the two.
+- A path containing a space or a control character reached `http.request` and
+  threw a raw `TypeError` from inside a promise. It is refused with a 400.
+
+### The suite guessed at timing
+
+One test pressed a second scene five milliseconds after the first and assumed
+the first would still be running. With the mock answering instantly that is a
+guess about how fast the machine is — and on a ten-core Mac running five test
+files at once, the guess was wrong: the first scene had already finished, and
+the test failed for a reason that had nothing to do with the plugin.
+
+It now waits for the first run to actually register, with latency that makes the
+overlap certain rather than likely. Four other tests slept a fixed interval and
+then asserted that nothing was still running; they wait for that to be true
+instead. Verified on both machines, serially and at ten-way parallelism.
+
+### Node 26
+
+`engines` declares it, CI builds against it, and the whole suite — 148 tests and
+114 browser checks — was run on it. 22 and 24 because Homebridge supports them;
+26 because it is Current and will be the next LTS, so a change in Node should
+break the build here rather than in somebody's house.
+
+148 unit tests and 114 browser checks, on Node 22, 24 and 26, serially and at
+ten-way parallelism. Each new test was confirmed to fail against the old code
+before its fix went in.
+
+---
+
 ## 3.2.0
 
 Two adversarial reviews — one of the Sonos protocol layer, one of the settings

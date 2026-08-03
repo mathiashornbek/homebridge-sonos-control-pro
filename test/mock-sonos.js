@@ -70,6 +70,8 @@ class MockHousehold {
      * scene's commands finish before the cancel is even noticed.
      */
     this.latencyMs = 0;
+    /** Accept every request and answer none of them. */
+    this.failEverything = false;
     /** Per-action overrides, e.g. a slow Spotify enqueue. */
     this.actionLatencyMs = {};
   }
@@ -162,6 +164,11 @@ class MockHousehold {
       const body = Buffer.concat(chunks).toString('utf8');
       const soapActionName =
         String(request.headers.soapaction || '').replace(/"/g, '').split('#')[1] || '';
+      // A household that accepts the connection and then never answers — a
+      // router rebooting, a firmware push, a switch that has lost power. The
+      // plugin's timeouts are what has to cope, so the mock has to be able to
+      // stop answering without also closing the socket.
+      if (this.failEverything) return;
       const delay = this.actionLatencyMs[soapActionName] ?? this.latencyMs;
       if (delay > 0) {
         setTimeout(() => this._respond(player, request, response, body), delay);

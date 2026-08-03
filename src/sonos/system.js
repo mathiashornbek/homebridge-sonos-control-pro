@@ -342,6 +342,10 @@ class SonosSystem extends EventEmitter {
     const existing = this.players.get(player.uuid);
     if (existing) {
       existing.host = player.host || existing.host;
+      // The port travels with the host or the two disagree. Rediscovery used
+      // to keep the old port while the topology refresh updated it, so the two
+      // paths described the same speaker differently.
+      if (player.port) existing.port = player.port;
       existing.name = player.name || existing.name;
       existing.model = player.model || existing.model;
       return existing;
@@ -409,6 +413,11 @@ class SonosSystem extends EventEmitter {
       }
       if (!xml) {
         this._topologySource = null;
+        // Record the attempt even though it failed. Without this the freshness
+        // guard never suppressed anything, so a household where nothing answers
+        // paid the full fan-out on *every* call — a speakers view that took
+        // 25 seconds and then did it again on the next refresh.
+        this.lastTopologyAt = Date.now();
         this.log.debug?.(t('log.topologyFailed', { message: error.message }));
         return this.groups;
       }
@@ -753,12 +762,18 @@ class SonosSystem extends EventEmitter {
       }),
     );
 
-    // Volume and mute are genuinely per speaker.
+    // Volume and mute are genuinely per speaker — and genuinely independent of
+    // each other, so they go out together. Awaiting them one after the other
+    // inside an object literal looks parallel and is not: an unreachable
+    // speaker used to cost two timeouts instead of one.
     const levels = await Promise.all(
-      players.map(async (player) => ({
-        volume: await player.getVolume().catch(() => null),
-        muted: await player.getMute().catch(() => null),
-      })),
+      players.map(async (player) => {
+        const [volume, muted] = await Promise.all([
+          player.getVolume().catch(() => null),
+          player.getMute().catch(() => null),
+        ]);
+        return { volume, muted };
+      }),
     );
 
     return base.map((entry, index) => {

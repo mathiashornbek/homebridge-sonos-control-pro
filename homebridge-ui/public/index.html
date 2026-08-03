@@ -5,13 +5,26 @@
     <div class="sf-header-main">
       <div class="sf-brand">
         <span class="sf-brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-            <rect x="1.6" y="6.9" width="13" height="10.2" rx="5.1" fill="currentColor" fill-opacity="0.28"/>
-            <rect x="1.6" y="6.9" width="13" height="10.2" rx="5.1" fill="none" stroke="currentColor" stroke-width="1.5"/>
-            <circle cx="10.1" cy="12" r="3.15" fill="currentColor"/>
-            <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9">
-              <path d="M17.1 9.4a4.2 4.2 0 0 1 0 5.2"/>
-              <path d="M20.2 7.3a8 8 0 0 1 0 9.4" stroke-opacity="0.55"/>
+          <!--
+            The mark from docs/icon.svg, at its own proportions.
+
+            This used to be a second, older drawing of the same idea: a rounder
+            switch, the knob in a different place, and two sound waves instead
+            of three. Side by side with the icon on the plugin page it read as
+            a different logo. The geometry below is the icon's, scaled into a
+            24-unit box about its own centre, so the two cannot drift apart
+            again without somebody editing these numbers on purpose.
+          -->
+          <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+            <g transform="translate(12 12) scale(0.0572) translate(-286.15 -252)">
+              <rect x="96" y="196" width="212" height="112" rx="56" fill="currentColor" fill-opacity="0.14"/>
+              <rect x="96" y="196" width="212" height="112" rx="56" fill="none" stroke="currentColor" stroke-width="13"/>
+              <circle cx="252" cy="252" r="38" fill="currentColor"/>
+              <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="22">
+                <path d="M344 212a62 62 0 0 1 0 80"/>
+                <path d="M389 180a112 112 0 0 1 0 144" stroke-opacity="0.75"/>
+                <path d="M434 148a162 162 0 0 1 0 208" stroke-opacity="0.46"/>
+              </g>
             </g>
           </svg>
         </span>

@@ -420,6 +420,7 @@ module.exports = {
   'ui.scenes.new': 'Ny scene',
   'ui.scenes.emptyTitle': 'Ingen scener endnu',
   'ui.scenes.emptyBody': 'Hent fire scener der virker med det samme, eller byg din egen fra bunden.',
+  'ui.scenes.volumeUnset': 'ingen lydstyrke valgt',
   'ui.scenes.noMatches': 'Ingen scener passer på “{query}”.',
   'ui.scenes.emptyPreset': 'Hent de fire startscener',
   'ui.scenes.emptyNew': 'Ny tom scene',
@@ -453,6 +454,8 @@ module.exports = {
     'Blokerer dit netværk multicast mellem VLAN\'er, svarer højttalerne ikke på den almindelige søgning. Skriv én adresse — resten findes gennem den. Adskil flere med komma.',
   'ui.sonos.manualPlaceholder': '192.168.1.40, 192.168.1.41',
   'ui.sonos.manualSave': 'Gem og søg',
+  'ui.sonos.manualSaveFailed': 'Adresserne kunne ikke gemmes: {message}',
+  'ui.sonos.manualSavedOffline': 'Gemt. Broen kører ikke, så de bliver brugt næste gang den starter.',
   'ui.sonos.manualNothing': 'Der svarede stadig ingen. Tjek adresserne, og at højttalerne er tændt.',
   'ui.sonos.searching': 'Søger…',
   'ui.sonos.found': 'Fandt {count} højttalere.',
@@ -500,6 +503,7 @@ module.exports = {
   'ui.tools.backupsTitle': 'Backups',
   'ui.tools.backupsHelp':
     'Der gemmes automatisk en version hver gang du ændrer noget. De 20 nyeste beholdes.',
+  'ui.tools.backupsUnavailable': 'Backuplisten kan ikke hentes lige nu.',
   'ui.tools.noBackups': 'Ingen backups endnu — der laves én automatisk næste gang du gemmer en scene.',
   'ui.tools.restore': 'Gendan',
   'ui.tools.restored': 'Backup gendannet.',
@@ -523,6 +527,7 @@ module.exports = {
 
   'ui.activity.help':
     'De seneste sceneafviklinger, trin for trin — nyttigt når noget ikke gør som forventet.',
+  'ui.activity.unavailable': 'Aktivitetsloggen kan ikke læses lige nu — broen kører ikke.',
   'ui.activity.emptyTitle': 'Ingen afviklinger endnu',
   'ui.activity.emptyBody':
     'Kør en scene — her kommer den til at stå med hvert trin, hvor lang tid det tog, og præcis hvad hver højttaler svarede.',
@@ -536,6 +541,7 @@ module.exports = {
   'ui.editor.subtitle': '{steps} trin · {type}',
   'ui.editor.typeMomentary': 'tryk-kontakt',
   'ui.editor.typeStateful': 'til/fra-kontakt',
+  'ui.editor.testCreated': 'At afprøve en scene gemmer den først, så “{name}” findes nu og er en kontakt i Apple Home.',
   'ui.editor.test': 'Afprøv nu',
   'ui.editor.save': 'Gem scene',
   'ui.editor.unsaved': 'Ikke gemt',

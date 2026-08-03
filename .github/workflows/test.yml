@@ -1,8 +1,9 @@
 name: Tests
 
 # The verification criteria ask that the plugin runs on every supported LTS
-# release of Node. This proves it on every push, rather than on the author's
-# word — and pins the two versions Homebridge itself supports.
+# release of Node. This proves it on every push rather than on the author's
+# word — 22 and 24 because Homebridge supports them, and 26 because it is
+# Current and will be the next LTS, so breakage should surface here first.
 
 on:
   push:
@@ -18,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24]
+        node: [22, 24, 26]
 
     steps:
       - uses: actions/checkout@v4

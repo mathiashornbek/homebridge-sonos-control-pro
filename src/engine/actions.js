@@ -650,7 +650,7 @@ const ACTIONS = {
   setVolume: {
     category: 'volume',
     targets: 'multi',
-    params: [{ key: 'volume', type: 'volume', required: true, min: 0, max: 100 }],
+    params: [{ key: 'volume', type: 'volume', required: true, min: 0, max: 100, default: 10 }],
     async run(ctx, step, players) {
       const volume = requireNumber(step.params.volume, 'param.volume', 0, 100);
       const failed = await forEachPlayer(players, ctx.log, (player) => player.setVolume(volume));
@@ -661,7 +661,7 @@ const ACTIONS = {
   adjustVolume: {
     category: 'volume',
     targets: 'multi',
-    params: [{ key: 'delta', type: 'number', required: true, min: -100, max: 100, step: 1 }],
+    params: [{ key: 'delta', type: 'number', required: true, min: -100, max: 100, step: 1, default: 5 }],
     async run(ctx, step, players) {
       const delta = requireNumber(step.params.delta, 'param.delta', -100, 100);
       const changes = [];

@@ -14,6 +14,25 @@ const { targetTypes, targetFilters } = require('../src/api');
 const { setLanguage, currentLanguage, dictionaryFor, AVAILABLE, t } = require('../src/i18n');
 
 /**
+ * Does this string contain a space or a control character?
+ *
+ * Written as a loop rather than a regular expression on purpose: the character
+ * class needed here is written with escapes that are easy to get wrong, and a
+ * mistake would either let something through or reject every real route.
+ *
+ * @param {string} value
+ * @returns {boolean}
+ */
+function hasUnsafeChars(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    // Everything up to and including the space, plus DEL.
+    if (code <= 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}
+
+/**
  * The settings-UI backend.
  *
  * Almost everything is forwarded to the running plugin's loopback control API,
@@ -194,7 +213,14 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
   async call(payload = {}) {
     const method = String(payload.method || 'GET').toUpperCase();
     const route = String(payload.path || '');
-    if (!route.startsWith('/')) throw new RequestError(t('error.badPath'), { status: 400 });
+    // A path is forwarded verbatim into http.request, which throws
+    // ERR_UNESCAPED_CHARACTERS on a space or a control character — inside a
+    // Promise executor, where it becomes a raw TypeError rather than a
+    // RequestError the page can explain. Refuse it here where the answer is
+    // still a plain 400.
+    if (!route.startsWith('/') || hasUnsafeChars(route)) {
+      throw new RequestError(t('error.badPath'), { status: 400 });
+    }
 
     const result = await this.proxy(method, route, payload.body, payload.timeout || 60000);
 
@@ -276,6 +302,25 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
         };
       },
       'GET /presets': () => ({ presets: listPresets() }),
+      // The history lives in the running plugin, and the backups live on disk.
+      // Both panels used to render as blank white space with the bridge down,
+      // which reads as "there is nothing here" rather than "I cannot see".
+      'GET /history': () => ({ history: [], offline: true }),
+      'GET /backups': async () => {
+        this.store.load();
+        return { backups: await this.store.listBackups(), offline: true };
+      },
+      'POST /backups/restore': async () => {
+        this.store.load();
+        this.store.restoreBackup(body?.name);
+        await this.store.save();
+        return { scenes: this.store.list(), offline: true };
+      },
+      // Saving the addresses is the settings page's job and works without the
+      // bridge; only trying them needs the plugin running. This is the one
+      // situation the field exists for, so it must not be the one where it is
+      // unusable.
+      'GET /playerIps': () => ({ playerIps: '', offline: true }),
     };
 
     const handler = routes[`${method} ${route}`];

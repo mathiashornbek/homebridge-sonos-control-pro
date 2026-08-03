@@ -32,6 +32,10 @@ const state = {
   recentlyAdded: [],
   sceneFilter: '',
   libraryFilter: '',
+  /** The level new speakers are adopted at. Kept here so a repaint cannot reset it. */
+  adoptVolume: 12,
+  /** Manual speaker addresses, as saved in the plugin config. */
+  playerIps: '',
   editing: null, // working copy of the scene in the drawer
   editingOriginal: '',
   openStepId: null,
@@ -160,6 +164,25 @@ function num(value, fallback = '') {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/**
+ * A URL we are willing to put in the page, or nothing.
+ *
+ * Escaping makes a value safe to sit inside an attribute; it does nothing about
+ * what the value *means*. `javascript:` and `data:` pass through `escapeHtml`
+ * unchanged. Album art arrives from whichever streaming service the household
+ * uses, so it is checked for scheme, not merely escaped.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function safeUrl(value) {
+  const url = String(value ?? '').trim();
+  if (!url) return '';
+  // Relative and protocol-relative URLs have no scheme to object to.
+  if (/^\/\/|^\/[^/]|^[^a-z]/i.test(url)) return url;
+  return /^https?:\/\//i.test(url) ? url : '';
+}
+
 function uid() {
   return (crypto.randomUUID ? crypto.randomUUID() : `id-${Math.random().toString(36).slice(2)}${Date.now()}`);
 }
@@ -178,9 +201,14 @@ function toast(message, kind = 'info', ttl = 4200, action = null) {
   // Three at a time is plenty; beyond that they cover what you are looking at.
   // A toast carrying an action is the exception: culling it would withdraw an
   // offer already made — "you can undo afterwards" has to stay true.
+  // When every visible toast carries an action there is nothing expendable, and
+  // removing the oldest anyway withdrew an undo that had already been offered —
+  // delete four scenes and the first became unrecoverable. In that case the cap
+  // gives way: an offer that has been made must stay open.
   while (host.children.length >= 3) {
     const expendable = [...host.children].find((node) => !node.querySelector('.sf-toast-action'));
-    (expendable || host.firstElementChild).remove();
+    if (!expendable) break;
+    expendable.remove();
   }
   const node = document.createElement('div');
   node.className = `sf-toast ${kind === 'success' ? 'is-good' : kind === 'error' ? 'is-bad' : kind === 'warn' ? 'is-warn' : ''}`;
@@ -284,8 +312,16 @@ function openDialog({ title, body = '', extra = '', confirmLabel, cancelLabel, d
     };
     const onConfirm = () => finish(read ? read(backdrop) : true);
     const onCancel = () => finish(null);
+    // A double-click on the button that opened this dialog puts its second
+    // press on the backdrop, which used to cancel immediately: the dialog
+    // flashed and the editor stayed open with no explanation. Nothing a person
+    // means by "click outside to cancel" happens in the first fifth of a
+    // second.
+    const openedAt = performance.now();
     const onBackdrop = (event) => {
-      if (event.target === backdrop) finish(null);
+      if (event.target !== backdrop) return;
+      if (performance.now() - openedAt < 200) return;
+      finish(null);
     };
     const onKey = (event) => {
       if (event.key === 'Escape') {
@@ -600,14 +636,15 @@ function sceneSummary(scene) {
     }
 
     if (step.action === 'adjustVolume') {
-      const delta = Number(params.delta);
-      parts.push(`${delta > 0 ? '+' : ''}${delta} %`);
+      const delta = num(params.delta, '');
+      parts.push(delta === '' ? t('ui.scenes.volumeUnset') : `${delta > 0 ? '+' : ''}${delta} %`);
       parts.push(targetSummary(step.target));
       continue;
     }
 
     if (step.action === 'setVolume') {
-      parts.push(`${params.volume} %`);
+      const level = num(params.volume, '');
+      parts.push(level === '' ? t('ui.scenes.volumeUnset') : `${level} %`);
       parts.push(targetSummary(step.target));
       continue;
     }
@@ -749,10 +786,23 @@ function unconfiguredPlayers() {
  * Cheaper than a full bootstrap and it leaves the rest of the page alone, so
  * the live view can update often without anything else flickering.
  */
+/**
+ * Which speaker poll is the current one.
+ *
+ * The Sonos tab is refreshed from four places — the five-second interval, the
+ * tab switch, the browser tab becoming visible, and a play/pause press — so two
+ * requests are routinely in flight at once. Without a generation number the
+ * slower one wins simply by finishing last, and the view snaps back to older
+ * volumes. Each request takes a ticket; only the newest ticket may paint.
+ */
+let playersGeneration = 0;
+
 async function refreshPlayers() {
   if (!state.connected) return;
+  const generation = (playersGeneration += 1);
   try {
     const data = await api('GET', '/players?state=1', undefined, { silent: true });
+    if (generation !== playersGeneration) return;
     state.players = data.players || [];
     state.groups = data.groups || [];
     renderPlayers();
@@ -793,8 +843,8 @@ function renderNewPlayers() {
         <div class="sf-row sf-row--wrap">
           <label class="sf-row" style="gap:8px">
             <span class="sf-hint">${escapeHtml(t('ui.newPlayers.volume'))}</span>
-            <input id="adopt-volume" type="range" min="0" max="100" value="12" style="width:160px" />
-            <span class="sf-volume-value" id="adopt-volume-value">12%</span>
+            <input id="adopt-volume" type="range" min="0" max="100" value="${num(state.adoptVolume, 12)}" style="width:160px" />
+            <span class="sf-volume-value" id="adopt-volume-value">${num(state.adoptVolume, 12)}%</span>
           </label>
           <button class="sf-btn sf-btn--primary" data-act="adopt-players" type="button">
             ${escapeHtml(t('ui.newPlayers.add'))}
@@ -804,10 +854,38 @@ function renderNewPlayers() {
     </div>`;
 }
 
+/**
+ * True while the user is in the middle of doing something on the Sonos tab.
+ *
+ * The tab repaints every five seconds by replacing the grid's markup outright.
+ * That is fine when nobody is touching it and destructive when somebody is: a
+ * volume slider held mid-drag lost the node under the pointer and the drag
+ * simply died, and the level snapped back to what it had been.
+ */
+let grabbingPlayers = false;
+let playersNeedRepaint = false;
+/** The address panel opens itself when discovery comes back empty — once. */
+let manualOpenedOnce = false;
+
+function playersBusy() {
+  if (grabbingPlayers) return true;
+  // Also leave it alone while a control on the tab has focus — somebody is
+  // arrowing a slider or typing a level.
+  const active = document.activeElement;
+  if (!active || active === document.body) return false;
+  return Boolean(active.closest?.('#player-grid, #new-players, #manual-ips'));
+}
+
 function renderPlayers() {
   const grid = $('#player-grid');
   const summary = $('#sonos-summary');
   const groupMap = $('#group-map');
+
+  if (playersBusy()) {
+    playersNeedRepaint = true;
+    return;
+  }
+  playersNeedRepaint = false;
   renderNewPlayers();
 
   const manual = $('#manual-ips');
@@ -818,7 +896,13 @@ function renderPlayers() {
     summary.textContent = t(state.connected ? 'ui.sonos.noneFound' : 'ui.sonos.noneOffline');
     // Nothing was found: this is the one moment the address box is the answer,
     // so open it rather than leaving it folded away under everything.
-    if (manual && state.connected) manual.open = true;
+    //
+    // Once only, though. Forcing it open on every five-second repaint meant a
+    // user who closed it watched it spring back, with no way to keep it shut.
+    if (manual && state.connected && !manualOpenedOnce) {
+      manual.open = true;
+      manualOpenedOnce = true;
+    }
     return;
   }
 
@@ -918,7 +1002,7 @@ function renderLibrary() {
                 <div class="sf-lib-art">
                   ${icon('music', 16)}
                   ${item.albumArt
-                    ? `<img src="${escapeHtml(item.albumArt)}" alt="" loading="lazy" onerror="this.remove()" />`
+                    ? `<img src="${escapeHtml(safeUrl(item.albumArt))}" alt="" loading="lazy" onerror="this.remove()" />`
                     : ''}
                 </div>
                 <div class="sf-lib-text">
@@ -1008,7 +1092,7 @@ function blankStep(action = 'groupAndPlay') {
 
 function openEditor(scene) {
   state.editing = structuredClone(scene);
-  state.editingOriginal = JSON.stringify(state.editing);
+  state.editingOriginal = canonicalScene(state.editing);
   state.openStepId = state.editing.steps?.[0]?.id || null;
   $('#editor-title').textContent = scene.name || t('ui.editor.newTitle');
   $('#editor-backdrop').classList.remove('is-hidden');
@@ -1019,7 +1103,7 @@ function openEditor(scene) {
 }
 
 async function closeEditor({ force = false } = {}) {
-  if (!force && state.editing && JSON.stringify(state.editing) !== state.editingOriginal) {
+  if (!force && state.editing && canonicalScene(state.editing) !== state.editingOriginal) {
     const ok = await confirmDialog({
       title: t('ui.editor.confirmClose'),
       body: t('ui.editor.confirmCloseBody'),
@@ -1033,8 +1117,30 @@ async function closeEditor({ force = false } = {}) {
   document.body.style.overflow = '';
 }
 
+/**
+ * A scene reduced to a form that compares equal when nothing meaningful changed.
+ *
+ * The unsaved-changes flag compares JSON, and several of a step's lists are
+ * sets in everything but name: which rooms join, which leave, which the target
+ * covers. Toggling a room off and back on appended it at the end, the JSON no
+ * longer matched, and the editor claimed unsaved changes for a scene identical
+ * to the one on disk — which then asked for confirmation on the way out.
+ *
+ * The order of `steps` is left alone: that one is meaningful.
+ *
+ * @param {object|null} scene
+ * @returns {string}
+ */
+function canonicalScene(scene) {
+  if (!scene) return '';
+  const SET_LIKE = new Set(['members', 'leave', 'names']);
+  return JSON.stringify(scene, (key, value) =>
+    SET_LIKE.has(key) && Array.isArray(value) ? [...value].sort() : value,
+  );
+}
+
 function markDirty() {
-  const dirty = state.editing && JSON.stringify(state.editing) !== state.editingOriginal;
+  const dirty = state.editing && canonicalScene(state.editing) !== state.editingOriginal;
   $('#editor-dirty').textContent = dirty ? t('ui.editor.unsaved') : '';
   const stepCount = (state.editing?.steps || []).length;
   $('#editor-subtitle').textContent = state.editing
@@ -1265,8 +1371,8 @@ function summariseStep(step, definition) {
   }
   const bits = [];
   if (definition?.targets !== 'none') bits.push(describeTargetLocal(step.target));
-  if (params.volume !== undefined) bits.push(`${params.volume}%`);
-  if (params.delta !== undefined) bits.push(`${params.delta > 0 ? '+' : ''}${params.delta}%`);
+  if (num(params.volume, '') !== '') bits.push(`${num(params.volume, 0)}%`);
+  if (num(params.delta, '') !== '') bits.push(`${num(params.delta, 0) > 0 ? '+' : ''}${num(params.delta, 0)}%`);
   if (params.favorite) bits.push(`"${params.favorite}"`);
   if (params.coordinator) bits.push(`→ ${params.coordinator}`);
   return bits.join(' · ') || (definition?.help ?? '');
@@ -1902,7 +2008,9 @@ async function onEditorClick(event) {
     const path = field.startsWith('param:') ? `params.${field.slice(6)}` : field;
     const current = path.split('.').reduce((value, key) => (value ? value[key] : undefined), step) || [];
     const name = button.dataset.name;
-    const next = current.includes(name) ? current.filter((entry) => entry !== name) : [...current, name];
+    const next = current.includes(name)
+      ? current.filter((entry) => entry !== name)
+      : [...current, name];
     setDeep(step, path, next);
     renderEditor();
     return;
@@ -2226,7 +2334,7 @@ async function saveScene() {
     await api('POST', '/scenes', { scene });
     const { scenes } = await api('GET', '/scenes');
     state.scenes = scenes;
-    state.editingOriginal = JSON.stringify(scene);
+    state.editingOriginal = canonicalScene(scene);
     closeEditor({ force: true });
     renderScenes();
     renderPlayers();
@@ -2259,10 +2367,10 @@ async function loadHistory() {
       <div class="sf-card">
         <div class="sf-card-head">
           <div>
-            <h2>${escapeHtml(entry.sceneName)} ${
+            <h2>${escapeHtml(entry.sceneName || t('common.unknown'))} ${
               entry.ok ? '' : `<span class="sf-pill sf-pill--danger">${escapeHtml(t('ui.activity.failed'))}</span>`
             }</h2>
-            <p class="sf-help">${fmtTime(entry.startedAt)} · ${escapeHtml(entry.trigger)} · ${entry.durationMs} ms${
+            <p class="sf-help">${fmtTime(entry.startedAt)} · ${escapeHtml(entry.trigger || '')} · ${num(entry.durationMs, 0)} ms${
               entry.conditionResult === undefined
                 ? ''
                 : ` · ${escapeHtml(t(entry.conditionResult ? 'ui.activity.conditionMet' : 'ui.activity.conditionNotMet'))}`
@@ -2271,7 +2379,7 @@ async function loadHistory() {
         </div>
         <div class="sf-card-body">
           <div class="sf-result">
-            ${entry.steps
+            ${(entry.steps || [])
               .map(
                 (step) => `
               <div class="sf-result-row ${step.ok ? '' : 'is-bad'} ${step.skipped ? 'is-skip' : ''}">
@@ -2287,7 +2395,11 @@ async function loadHistory() {
       )
       .join('');
   } catch {
-    /* reported */
+    // Blank white space reads as "there is nothing here". Say which it is.
+    const list = $('#history-list');
+    if (list) {
+      list.innerHTML = `<p class="sf-help">${escapeHtml(t('ui.activity.unavailable'))}</p>`;
+    }
   }
 }
 
@@ -2314,7 +2426,10 @@ async function loadBackups() {
       )
       .join('');
   } catch {
-    /* reported */
+    const list = $('#backup-list');
+    if (list) {
+      list.innerHTML = `<p class="sf-help">${escapeHtml(t('ui.tools.backupsUnavailable'))}</p>`;
+    }
   }
 }
 
@@ -2323,10 +2438,17 @@ async function loadBackups() {
 function switchTab(name) {
   $$('.sf-tab').forEach((tab) => tab.classList.toggle('is-active', tab.dataset.tab === name));
   $$('.sf-panel-tab').forEach((panel) => panel.classList.toggle('is-active', panel.dataset.panel === name));
-  if (name === 'activity') loadHistory();
-  if (name === 'tools') loadBackups();
-  if (name === 'sonos') refreshPlayers();
+  const settled = [];
+  if (name === 'activity') settled.push(loadHistory());
+  if (name === 'tools') settled.push(loadBackups());
+  if (name === 'sonos') settled.push(refreshPlayers());
   homebridge.fixScrollHeight?.();
+  // …and again once the panel actually has content in it. Homebridge sizes the
+  // frame to its content, and measuring before the list has loaded leaves a
+  // long Activity tab clipped until the tab is switched twice.
+  if (settled.length) {
+    Promise.allSettled(settled).then(() => homebridge.fixScrollHeight?.());
+  }
 }
 
 function download(filename, text) {
@@ -2371,32 +2493,59 @@ function wireApp() {
     const field = $('#manual-ips-input');
     const value = field.value.trim();
     homebridge.showSpinner();
+
+    // Saving and applying are two separate things, and they fail separately.
+    //
+    // Saving is what makes the addresses survive a restart, and it is the more
+    // important of the two — so it goes first, and it works even when the
+    // bridge is down. That matters: a bridge that cannot find its speakers is
+    // exactly the situation this field exists for, and it used to give up at
+    // the first step and save nothing.
+    let saved = false;
     try {
-      // The bridge first, so the addresses are tried now rather than at the
-      // next restart — then config.json, so they survive one.
-      const result = await api('POST', '/playerIps', { playerIps: value });
-      // Remembered, so the panel stays open while addresses are in use — they
-      // are how these speakers were found, and the first thing to check if one
-      // of them stops answering.
-      state.playerIps = value;
       const configs = await homebridge.getPluginConfig();
-      if (configs?.length) {
-        const [config, ...rest] = configs;
-        await homebridge.updatePluginConfig([{ ...config, playerIps: value }, ...rest]);
-        await homebridge.savePluginConfig();
-      }
-      await bootstrap({ quiet: true });
-      toast(
-        result?.found
-          ? t('ui.sonos.found', { count: result.found })
-          : t('ui.sonos.manualNothing'),
-        result?.found ? 'success' : 'warn',
-      );
-    } catch {
-      /* reported */
-    } finally {
-      homebridge.hideSpinner();
+      // An empty list means the platform is not in config.json at all. Writing
+      // one from here would quietly configure the plugin — but leaving it
+      // unwritten silently loses the addresses at the next restart, which is
+      // worse and is what used to happen. Add the block; the user asked for
+      // this by typing an address and pressing save.
+      const [config, ...rest] = configs?.length ? configs : [{ platform: 'SonosControlPro', name: 'Sonos Control Pro' }];
+      await homebridge.updatePluginConfig([{ ...config, playerIps: value }, ...rest]);
+      await homebridge.savePluginConfig();
+      saved = true;
+      state.playerIps = value;
+    } catch (error) {
+      // A failed save used to be completely silent — no toast, no console
+      // line — so there was no way to tell whether it had worked.
+      toast(t('ui.sonos.manualSaveFailed', { message: error?.message || String(error) }), 'error');
     }
+
+    // Then ask the running plugin to try them now rather than at the next
+    // restart. If the bridge is down this fails, and that is not a reason to
+    // undo the save.
+    let result = null;
+    let applied = false;
+    try {
+      result = await api('POST', '/playerIps', { playerIps: value }, { silent: true });
+      applied = true;
+    } catch {
+      /* the bridge is not there; the addresses are still saved */
+    }
+
+    try {
+      await bootstrap({ quiet: true });
+    } catch {
+      /* the page keeps whatever it already had */
+    }
+
+    if (!applied) {
+      if (saved) toast(t('ui.sonos.manualSavedOffline'), 'warn', 6000);
+    } else if (result?.found) {
+      toast(t('ui.sonos.found', { count: result.found }), 'success');
+    } else {
+      toast(t('ui.sonos.manualNothing'), 'warn', 6000);
+    }
+    homebridge.hideSpinner();
   });
 
   $('#btn-reload-library').addEventListener('click', async () => {
@@ -2493,11 +2642,15 @@ function wireApp() {
       return;
     }
     if (act === 'duplicate') {
-      const { scene } = await api('POST', '/scenes/duplicate', { id: button.dataset.id });
-      const { scenes } = await api('GET', '/scenes');
-      state.scenes = scenes;
-      renderScenes();
-      toast(t('ui.scenes.created', { name: scene.name }), 'success');
+      try {
+        const { scene } = await api('POST', '/scenes/duplicate', { id: button.dataset.id });
+        const { scenes } = await api('GET', '/scenes');
+        state.scenes = scenes;
+        renderScenes();
+        toast(t('ui.scenes.created', { name: scene.name }), 'success');
+      } catch {
+        /* api() has already said so */
+      }
       return;
     }
     if (act === 'delete') {
@@ -2552,14 +2705,18 @@ function wireApp() {
         danger: true,
       });
       if (!ok) return;
-      const { scenes } = await api('POST', '/backups/restore', { name: button.dataset.name });
-      state.scenes = scenes;
-      renderScenes();
-      toast(t('ui.tools.restored'), 'success');
+      try {
+        const { scenes } = await api('POST', '/backups/restore', { name: button.dataset.name });
+        state.scenes = scenes;
+        renderScenes();
+        toast(t('ui.tools.restored'), 'success');
+      } catch {
+        /* api() has already said so */
+      }
       return;
     }
     if (act === 'adopt-players') {
-      const volume = Number($('#adopt-volume')?.value ?? 12);
+      const volume = num($('#adopt-volume')?.value ?? state.adoptVolume, 12);
       const names = unconfiguredPlayers();
       button.disabled = true;
       try {
@@ -2587,10 +2744,14 @@ function wireApp() {
     if (act === 'player-toggle') {
       const player = state.players.find((entry) => entry.name === button.dataset.name);
       const wasPlaying = player?.playing ?? (player?.state === 'PLAYING' || player?.state === 'TRANSITIONING');
-      await api('POST', '/player/transport', {
-        player: button.dataset.name,
-        command: wasPlaying ? 'pause' : 'play',
-      });
+      try {
+        await api('POST', '/player/transport', {
+          player: button.dataset.name,
+          command: wasPlaying ? 'pause' : 'play',
+        });
+      } catch {
+        /* api() has already said so */
+      }
       setTimeout(refreshPlayers, 500);
     }
   });
@@ -2600,18 +2761,61 @@ function wireApp() {
     if (target.dataset.act === 'toggle' && !target.closest('#editor-body')) {
       const scene = state.scenes.find((entry) => entry.id === target.dataset.id);
       if (!scene) return;
+      // Flip it, try to save it, put it back if the save did not happen. The
+      // optimistic flip is what makes the switch feel instant; without the
+      // rollback a failed write left the page and the disk disagreeing, and
+      // threw on top of it.
+      const previous = scene.enabled;
       scene.enabled = target.checked;
-      await api('POST', '/scenes', { scene });
-      renderScenes();
-      toast(t(scene.enabled ? 'ui.scenes.turnedOn' : 'ui.scenes.turnedOff', { name: scene.name }), 'success', 2500);
+      try {
+        await api('POST', '/scenes', { scene });
+        renderScenes();
+        toast(t(scene.enabled ? 'ui.scenes.turnedOn' : 'ui.scenes.turnedOff', { name: scene.name }), 'success', 2500);
+      } catch {
+        scene.enabled = previous;
+        renderScenes();
+      }
     }
   });
+
+  // A repaint of the Sonos tab while a slider is held destroys the drag. These
+  // two mark the tab busy for as long as a hand is on it, and catch up with
+  // whatever the poll wanted to draw the moment it is let go.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (event.target.closest?.('#player-grid, #new-players, #manual-ips')) grabbingPlayers = true;
+    },
+    true,
+  );
+  const releasePlayers = () => {
+    if (!grabbingPlayers) return;
+    grabbingPlayers = false;
+    if (playersNeedRepaint) renderPlayers();
+  };
+  document.addEventListener('pointerup', releasePlayers, true);
+  document.addEventListener('pointercancel', releasePlayers, true);
+  // Focus can outlive the pointer — arrowing a slider, or typing a level.
+  document.addEventListener(
+    'focusout',
+    () => {
+      // After the blur has landed, so `document.activeElement` is up to date.
+      setTimeout(() => {
+        if (playersNeedRepaint && !playersBusy()) renderPlayers();
+      }, 0);
+    },
+    true,
+  );
 
   document.addEventListener('input', async (event) => {
     const target = event.target;
     if (target.id === 'adopt-volume') {
+      // Remembered, or the next five-second repaint puts it back to 12 — and
+      // the Add button reads the DOM, so speakers were adopted at 12 % rather
+      // than at the level that had been set.
+      state.adoptVolume = num(target.value, 12);
       const label = $('#adopt-volume-value');
-      if (label) label.textContent = `${target.value}%`;
+      if (label) label.textContent = `${state.adoptVolume}%`;
       return;
     }
     if (target.dataset.act !== 'player-volume') return;
@@ -2632,8 +2836,14 @@ function wireApp() {
     if (!state.editing) return;
     homebridge.showSpinner();
     try {
+      // Trying a scene has to save it first — the bridge runs what is on disk.
+      // That makes a brand-new scene real, and a HomeKit switch along with it.
+      // Say so, rather than leaving the footer claiming "not saved" and Cancel
+      // closing without asking: the scene existed either way.
+      const isNew = !state.scenes.some((entry) => entry.id === state.editing.id);
       await api('POST', '/scenes', { scene: state.editing });
-      state.editingOriginal = JSON.stringify(state.editing);
+      state.editingOriginal = canonicalScene(state.editing);
+      markDirty();
       const { result } = await api('POST', '/scenes/run', { id: state.editing.id });
       renderRunResult(result);
       toast(
@@ -2644,6 +2854,7 @@ function wireApp() {
       const { scenes } = await api('GET', '/scenes');
       state.scenes = scenes;
       renderScenes();
+      if (isNew) toast(t('ui.editor.testCreated', { name: state.editing.name }), 'info', 6000);
     } catch {
       /* reported */
     } finally {

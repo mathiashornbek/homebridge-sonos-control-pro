@@ -431,6 +431,38 @@ test('a household with no seeds at all is the same, quiet, story', async () => {
   assert.equal(warnings.length, 1);
 });
 
+// -------------------------------------------------------------- the brand
+
+test('the settings header draws the same mark as the icon', async () => {
+  // These were two drawings of the same idea, and they drifted: the header had
+  // a rounder switch, the knob in a different place, and two sound waves where
+  // the icon has three. Side by side on the plugin page it read as a different
+  // logo. The header now reuses the icon's own geometry; this makes sure a
+  // change to one is a change to both.
+  const fs = require('node:fs/promises');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const icon = await fs.readFile(path.join(root, 'docs', 'icon.svg'), 'utf8');
+  const header = await fs.readFile(path.join(root, 'homebridge-ui', 'public', 'index.html'), 'utf8');
+  const mark = header.match(/<span class="sf-brand-mark"[\s\S]*?<\/span>/)?.[0];
+  assert.ok(mark, 'the header has no brand mark');
+
+  // The shapes that make the mark what it is, in the icon's own coordinates.
+  const shapes = [
+    'x="96" y="196" width="212" height="112" rx="56"',
+    'cx="252" cy="252" r="38"',
+    'M344 212a62 62 0 0 1 0 80',
+    'M389 180a112 112 0 0 1 0 144',
+    'M434 148a162 162 0 0 1 0 208',
+  ];
+  for (const shape of shapes) {
+    assert.ok(icon.includes(shape), `docs/icon.svg no longer contains ${shape}`);
+    assert.ok(mark.includes(shape), `the header mark is missing ${shape}`);
+  }
+  // Three waves, not two.
+  assert.equal((mark.match(/<path /g) || []).length, 3, 'the header mark must have three sound waves');
+});
+
 // ------------------------------------------- hostile and hand-edited scenes
 
 test('an id that would break out of an HTML attribute is replaced', () => {
@@ -576,4 +608,41 @@ test('the suite never broadcasts on the machine it is running on', async () => {
     }
   }
   assert.deepEqual(offenders, [], `a SonosSystem without a stubbed sweep:\n${offenders.join('\n')}`);
+});
+
+// ------------------------------------------------- the level a step stores
+
+test('a volume step stores the level its slider shows', () => {
+  // The editor rendered `value ?? default ?? 10`, inventing a 10 the model
+  // never held: the slider read 10, the saved step was `{}`, and the scene card
+  // then read "no level set". The catalogue carries the default now, so the
+  // control and the stored scene start out agreeing.
+  const { actionCatalogue } = require('../src/engine/actions');
+  const byId = new Map();
+  for (const group of actionCatalogue()) {
+    for (const action of group.actions) byId.set(action.id, action);
+  }
+  for (const [id, key] of [
+    ['setVolume', 'volume'],
+    ['adjustVolume', 'delta'],
+  ]) {
+    const param = byId.get(id).params.find((entry) => entry.key === key);
+    assert.ok(param, `${id} has no ${key} parameter`);
+    assert.equal(typeof param.default, 'number', `${id}.${key} must have a default the editor can show`);
+  }
+});
+
+test('a whitespace-only volume is refused, not treated as silence', () => {
+  // Number(' ') is 0, so a field containing a space used to mute every chosen
+  // speaker and report success — the exact answer the code's own comment says
+  // must never happen.
+  const { clampVolume } = require('../src/sonos/player');
+  for (const value of ['', ' ', '\t', '   ', null, undefined, [], false, {}]) {
+    assert.throws(() => clampVolume(value), /volume|lydstyrke/i, `clampVolume(${JSON.stringify(value)}) did not throw`);
+  }
+  assert.equal(clampVolume('0'), 0, 'a real zero is still a real zero');
+  assert.equal(clampVolume(0), 0);
+  assert.equal(clampVolume('42'), 42);
+  assert.equal(clampVolume(120), 100, 'and out of range is clamped');
+  assert.equal(clampVolume(-5), 0);
 });

@@ -5,6 +5,8 @@ const os = require('node:os');
 
 const SSDP_ADDRESS = '239.255.255.250';
 const SSDP_PORT = 1900;
+/** How soon the second M-SEARCH burst goes out. Must be inside `graceMs`. */
+const REBURST_MS = 150;
 const SEARCH_TARGETS = [
   'urn:schemas-upnp-org:device:ZonePlayer:1',
   'urn:smartspeaker-audio:service:SpeakerGroup:1',
@@ -62,9 +64,47 @@ function parseResponse(message) {
   }
   const location = headers.location;
   if (!location) return null;
-  const match = /^https?:\/\/([^:/]+)(?::(\d+))?/.exec(location);
+  // Case-insensitive, because `HTTP://` is legal and used to return null.
+  // The bracketed form is IPv6: `http://[fd00::1]:1400/…`. Matching the old
+  // way gave `host: "[fd00"`, and every later connection to that "speaker"
+  // was an ENOTFOUND that burned a full describe timeout.
+  const match = /^https?:\/\/(\[[^\]]+\]|[^:/]+)(?::(\d+))?/i.exec(location);
   if (!match) return null;
-  return { host: match[1], port: match[2] ? Number(match[2]) : null, location, usn: headers.usn || '' };
+  return {
+    host: match[1],
+    port: match[2] ? Number(match[2]) : null,
+    location,
+    usn: headers.usn || '',
+    st: headers.st || '',
+    server: headers.server || '',
+  };
+}
+
+/**
+ * Does this answer come from a Sonos player?
+ *
+ * Plenty of devices reply to an M-SEARCH regardless of the ST they were asked
+ * about — routers, NAS boxes, printers, televisions. Accepting them meant
+ * describing a router as a speaker, and with `stopAfterFirst` a router that
+ * answered in 20 ms ended discovery before a single real speaker had replied:
+ * zero players found, four seconds spent, and a warning that blamed the
+ * addresses in `playerIps`, which were not involved.
+ *
+ * Sonos identifies itself three ways, and any one of them is enough.
+ *
+ * @param {{usn: string, st: string, server: string, location: string}} hit
+ */
+function looksLikeSonos(hit) {
+  const usn = String(hit.usn || '').toLowerCase();
+  const st = String(hit.st || '').toLowerCase();
+  const server = String(hit.server || '').toLowerCase();
+  return (
+    usn.includes('rincon') ||
+    usn.includes('zoneplayer') ||
+    st.includes('zoneplayer') ||
+    st.includes('smartspeaker-audio') ||
+    server.includes('sonos')
+  );
 }
 
 /**
@@ -85,7 +125,7 @@ function parseResponse(message) {
  * @param {(hit: {host: string, location: string, usn: string}) => void} [options.onHit]
  * @returns {Promise<Array<{host: string, location: string, usn: string}>>}
  */
-async function discover({ timeout = 3000, stopAfterFirst = false, graceMs = 400, onHit } = {}) {
+async function discover({ timeout = 3000, stopAfterFirst = false, graceMs = 500, onHit } = {}) {
   const found = new Map();
   const sockets = [];
   let finish = () => {};
@@ -101,7 +141,9 @@ async function discover({ timeout = 3000, stopAfterFirst = false, graceMs = 400,
   const record = (message) => {
     const hit = parseResponse(message);
     if (!hit || found.has(hit.host)) return;
-    // Sonos answers on both search targets; only ZonePlayer USNs are players.
+    // Sonos answers on both search targets, and so do plenty of things that
+    // are not speakers. This is the filter the comment used to promise.
+    if (!looksLikeSonos(hit)) return;
     found.set(hit.host, hit);
     if (onHit) {
       try {
@@ -148,10 +190,18 @@ async function discover({ timeout = 3000, stopAfterFirst = false, graceMs = 400,
               } catch {
                 /* not fatal — the default route still gets searched */
               }
-              const mx = Math.max(1, Math.round(timeout / 1000) - 1);
+              // MX is the window a responder may spread its reply over, and it
+              // has to agree with how long we actually listen. Asking for 3
+              // seconds and then hanging up 400 ms after the first answer told
+              // every remaining speaker to reply during a period when nobody
+              // was listening. When we mean to stop early, we ask everyone to
+              // answer promptly instead.
+              const mx = stopAfterFirst ? 1 : Math.max(1, Math.round(timeout / 1000) - 1);
               for (const target of SEARCH_TARGETS) {
                 const message = searchMessage(target, mx);
-                // Two bursts: UDP is lossy and a missed player is a missing speaker.
+                // Two bursts: UDP is lossy and a missed player is a missing
+                // speaker. The second goes out well inside the grace period,
+                // or it is a burst nobody hears.
                 socket.send(message, 0, message.length, SSDP_PORT, SSDP_ADDRESS, () => {});
                 setTimeout(() => {
                   try {
@@ -159,7 +209,7 @@ async function discover({ timeout = 3000, stopAfterFirst = false, graceMs = 400,
                   } catch {
                     /* socket already closed */
                   }
-                }, 400).unref?.();
+                }, REBURST_MS).unref?.();
               }
               done();
             });
@@ -190,4 +240,4 @@ async function discover({ timeout = 3000, stopAfterFirst = false, graceMs = 400,
   return [...found.values()];
 }
 
-module.exports = { discover, localIPv4Addresses, SSDP_ADDRESS, SSDP_PORT };
+module.exports = { discover, looksLikeSonos, parseResponse, localIPv4Addresses, SSDP_ADDRESS, SSDP_PORT };

@@ -478,6 +478,45 @@ await page.click('#btn-manual-ips');
 await page.waitForTimeout(400);
 await page.evaluate(() => document.querySelectorAll('.sf-toast').forEach((n) => n.remove()));
 
+// A failed save used to be completely silent — no toast, no console line — so
+// there was no way to tell whether the addresses had been written.
+await page.evaluate(() => {
+  window.__savedOk = window.homebridge.savePluginConfig;
+  window.homebridge.savePluginConfig = async () => {
+    throw new Error('disk is read-only');
+  };
+});
+await page.fill('#manual-ips-input', '10.0.0.7, 10.0.0.8');
+await page.click('#btn-manual-ips');
+await page.waitForTimeout(500);
+check('en fejlet gemning bliver sagt højt', (await page.$$('.sf-toast.is-bad')).length >= 1,
+  await page.textContent('#toasts'));
+await page.evaluate(() => {
+  window.homebridge.savePluginConfig = window.__savedOk;
+  document.querySelectorAll('.sf-toast').forEach((n) => n.remove());
+});
+
+// …and with no platform block in config.json at all, the addresses used to be
+// applied and never written, so they vanished at the next restart in silence.
+await page.evaluate(() => {
+  window.__configBefore = window.__config;
+  window.__config = [];
+});
+await page.fill('#manual-ips-input', '10.0.0.9, 10.0.0.10');
+await page.click('#btn-manual-ips');
+await page.waitForTimeout(500);
+check('adresserne gemmes også når platformblokken mangler',
+  (await page.evaluate(() => window.__config?.[0]?.playerIps)) === '10.0.0.9, 10.0.0.10',
+  JSON.stringify(await page.evaluate(() => window.__config)));
+await page.evaluate(() => {
+  window.__config = window.__configBefore;
+  document.querySelectorAll('.sf-toast').forEach((n) => n.remove());
+});
+await page.fill('#manual-ips-input', '');
+await page.click('#btn-manual-ips');
+await page.waitForTimeout(400);
+await page.evaluate(() => document.querySelectorAll('.sf-toast').forEach((n) => n.remove()));
+
 // A status pill that wraps inside its own oval looks broken.
 const measurePills = () =>
   page.$$eval('.sf-player .sf-pill', (nodes) =>
@@ -718,6 +757,28 @@ await page.waitForTimeout(400);
 check('fortryd bringer scenen tilbage', store.list().some((scene) => scene.name === 'Godnat'));
 const restored = store.list().find((scene) => scene.name === 'Godnat');
 check('fortryd bevarer trinnene', restored.steps[0].params.delta === -10, JSON.stringify(restored.steps[0].params));
+
+// An undo already offered must stay open. Three toasts is the cap, and when
+// all three carry an action the code used to drop the oldest anyway — so the
+// fourth delete quietly withdrew the first scene's only way back.
+await page.evaluate(() => document.querySelectorAll('.sf-toast').forEach((node) => node.remove()));
+const doomed = (await page.$$eval('.sf-scene', (nodes) => nodes.map((node) => node.dataset.id))).slice(0, 4);
+for (const id of doomed) {
+  await page.click(`.sf-scene[data-id="${id}"] [data-act="delete"]`);
+  await page.waitForTimeout(150);
+  await page.click('#dialog-confirm');
+  await page.waitForTimeout(250);
+}
+check('fire sletninger giver fire fortryd-knapper', (await page.$$('.sf-toast-action')).length === 4,
+  `fandt ${(await page.$$('.sf-toast-action')).length}`);
+// Put them all back, so the rest of the run sees the scenes it expects.
+for (const button of (await page.$$('.sf-toast-action')).reverse()) {
+  await button.click();
+  await page.waitForTimeout(200);
+}
+check('alle fire kom tilbage', (await page.$$('.sf-scene')).length === 8,
+  `fandt ${(await page.$$('.sf-scene')).length}`);
+await page.evaluate(() => document.querySelectorAll('.sf-toast').forEach((node) => node.remove()));
 
 // Remove it for good, so the rest of the run sees the preset's seven scenes.
 await page.click(`.sf-scene[data-id="${restored.id}"] [data-act="delete"]`);
