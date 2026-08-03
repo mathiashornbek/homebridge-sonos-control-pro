@@ -20,7 +20,11 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(here, '..', 'homebridge-ui', 'public');
 // Screenshots land in docs/, where the README picks them up.
-const shots = path.join(here, '..', 'docs', 'screenshots');
+// The gallery is a visual artefact of the test run, not documentation: the
+// READMEs show Mathias's own household. Kept out of git; look at it locally
+// when a change to the interface needs an eye on it.
+const shots = path.join(here, '..', 'docs', 'ui-gallery');
+fs.mkdirSync(shots, { recursive: true });
 fs.mkdirSync(shots, { recursive: true });
 
 const { actionCatalogue } = require('../src/engine/actions');

@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.1.5
+
+### The screenshots are of a real house now
+
+Every picture in both READMEs came from the test suite: a mock household with fourteen invented rooms called Kitchen, Pantry and Dining Room. It was accurate, it was safe, and it looked exactly like what it was — a fixture.
+
+They are now photographs of the system this plugin was built to run: fourteen real Sonos speakers in three groups, eight scenes, twenty-one favourites read off the household, a backup list with real timestamps, and — the one no fixture could ever produce — the scenes sitting in Apple Home as ordinary switches.
+
+Two of them earn their place beyond looking real. The editor shot shows *Included automatically* listing eleven rooms nobody typed, next to the two that were excluded by hand: that is the "everyone except…" idea in one picture, better than the paragraph explaining it. And the backup list is a genuine one, twenty deep, timestamps and scene counts — the difference between claiming a safety net and showing one.
+
+The gallery the UI smoke test renders has moved to `docs/ui-gallery/` and is no longer committed. It was always a visual check on the interface rather than documentation, and keeping it in `docs/screenshots/` meant sixteen files nothing pointed at.
+
+The confirm-dialog and activity pictures are gone with it; those sections stand on their text until there are real ones to put back.
+
 ## 3.1.4
 
 ### A README that actually sells the thing

@@ -30,7 +30,7 @@ So you open the Sonos app. Group seven rooms by hand. Set seven volumes. Find th
 ## ✨ Now it is one switch
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-scenes.png" width="760" alt="The scene list" />
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/scenes.png" width="760" alt="The scene list" />
 </p>
 
 Every scene you build becomes an ordinary switch in Apple Home. Press it and the group forms, every level lands and the music starts — **a fourteen-room house is up and playing in about a second**. ⚡
@@ -38,7 +38,11 @@ Every scene you build becomes an ordinary switch in Apple Home. Press it and the
 > 🗣️ *"Hey Siri, party mode."*
 > 🏠 Put it on your Home screen. ⏰ Fire it from an automation at 07:00. 🎛️ Bind it to a button.
 
-It is just a switch. So **everything HomeKit can do to a switch, it can now do to your music.**
+It is just a switch. So **everything HomeKit can do to a switch, it can now do to your music.** 👇
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/apple-home.png" width="700" alt="The scenes as switches in Apple Home" />
+</p>
 
 ---
 
@@ -80,8 +84,8 @@ There is **not one UUID, IP address or room name** for you to type. The whole ed
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-sonos.png" alt="Live speaker view" /></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-library.png" alt="Favourites read from Sonos" /></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/speakers.png" alt="Live speaker view" /></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/favourites.png" alt="Favourites read from Sonos" /></td>
 </tr>
 <tr>
 <td>🎚️ <b>Your household, live.</b> Every speaker with its real volume, what it is playing and which group it is in. Drag a slider here and the speaker moves in the room.</td>
@@ -94,7 +98,7 @@ There is **not one UUID, IP address or room name** for you to type. The whole ed
 ## 🎨 One step builds a whole scene
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-editor.png" width="760" alt="The scene editor" />
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/editor.png" width="760" alt="The scene editor" />
 </p>
 
 The action you will use most is **Start music in a group** — a single step that does everything a music scene needs:
@@ -109,19 +113,21 @@ The action you will use most is **Start music in a group** — a single step tha
 | 🔀 **Shuffle / repeat / crossfade** | Leave on *Unchanged* to not touch them. |
 | ⏱️ **Timing** | *Automatic* (fastest — each phase starts the moment the last confirms) or fixed offsets you set yourself, previewed as a timeline. |
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/editor-group.png" width="700" alt="Choosing the source, who leaves the group and who is included automatically" />
+</p>
+
+Look at **Included automatically**: you never listed those rooms. You said *"everyone except the living room and the garage"*, and the scene works the rest out — today, and again the day you add a speaker. 🪄
+
 ### 🎚️ Type it or drag it — your choice
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-editor-volumes.png" width="700" alt="Per-speaker levels with typed percentages" />
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/editor-levels.png" width="700" alt="Per-speaker levels with typed percentages" />
 </p>
 
 Every speaker gets its own level, with a slider **and** a number field — because a slider is great for finding a level by ear and useless for saying "twelve". 🎯 One click on **Use current levels** captures whatever already sounds right in the house. One `×` means *leave this speaker alone*.
 
 ### 🛟 And it is hard to break
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-dialog.png" width="700" alt="Delete confirmation with undo" />
-</p>
 
 Every destructive action asks first — and then **still** gives you an Undo. ↩️ Scenes are validated as you build: a music scene with no leader tells you so, at the step, before you save. Nothing is written to `config.json`, so a bad edit can never take your bridge down. 🛡️
 
@@ -130,7 +136,7 @@ Every destructive action asks first — and then **still** gives you an Undo. �
 ## 🎁 Templates: a working system in about thirty seconds
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-tools.png" width="760" alt="Templates, export/import and backups" />
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/backup.png" width="760" alt="Templates, export/import and backups" />
 </p>
 
 Don't start from an empty page. Press **Load the four starter scenes** and you instantly get four working switches — **Music everywhere**, **Pause everything**, **Turn up**, **Turn down** — already wired to *your* speakers, because the template hydrates itself from your live household. 🪄
@@ -151,11 +157,7 @@ Moving house, rebuilding your bridge or just experimenting — your scenes are a
 
 ## 📈 See exactly what happened
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-activity.png" width="760" alt="The activity log" />
-</p>
-
-Every run, step by step, with **how long each one took** and **exactly what each speaker answered**. ⏱️ When something misbehaves you can see why, in seconds — instead of guessing at a log file. A step over three seconds is also called out by name in the Homebridge log.
+Open the **Activity** tab and there is every run, step by step, with **how long each one took** and **exactly what each speaker answered**. ⏱️ When something misbehaves you can see why, in seconds — instead of guessing at a log file. A step over three seconds is also called out by name in the Homebridge log.
 
 ---
 

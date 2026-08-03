@@ -30,7 +30,7 @@ Så du åbner Sonos-appen. Grupperer syv rum i hånden. Sætter syv lydstyrker. 
 ## ✨ Nu er det én kontakt
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-scenes-da.png" width="760" alt="Scenelisten" />
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/scenes.png" width="760" alt="Scenelisten" />
 </p>
 
 Hver scene du bygger bliver til en helt almindelig kontakt i Apple Home. Tryk på den, og gruppen dannes, hver lydstyrke lander, og musikken starter — **et hus med fjorten rum spiller efter cirka et sekund**. ⚡
@@ -38,7 +38,11 @@ Hver scene du bygger bliver til en helt almindelig kontakt i Apple Home. Tryk p�
 > 🗣️ *"Hey Siri, festmusik."*
 > 🏠 Læg den på hjemmeskærmen. ⏰ Lad en automatik trykke kl. 07.00. 🎛️ Bind den til en knap.
 
-Det er bare en kontakt. Så **alt hvad HomeKit kan gøre ved en kontakt, kan den nu gøre ved din musik.**
+Det er bare en kontakt. Så **alt hvad HomeKit kan gøre ved en kontakt, kan den nu gøre ved din musik.** 👇
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/apple-home.png" width="700" alt="Scenerne som kontakter i Apple Home" />
+</p>
 
 ---
 
@@ -80,8 +84,8 @@ Der er **ikke ét eneste UUID, én IP-adresse eller ét rumnavn**, du skal skriv
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-sonos-da.png" alt="Live højttaleroversigt" /></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-library-da.png" alt="Favoritter hentet fra Sonos" /></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/speakers.png" alt="Live højttaleroversigt" /></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/favourites.png" alt="Favoritter hentet fra Sonos" /></td>
 </tr>
 <tr>
 <td>🎚️ <b>Din husstand, live.</b> Hver højttaler med sin rigtige lydstyrke, hvad den spiller, og hvilken gruppe den er i. Træk i en skyder her, og højttaleren følger med i rummet.</td>
@@ -94,7 +98,7 @@ Der er **ikke ét eneste UUID, én IP-adresse eller ét rumnavn**, du skal skriv
 ## 🎨 Ét trin bygger en hel scene
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-editor-da.png" width="760" alt="Sceneeditoren" />
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/editor.png" width="760" alt="Sceneeditoren" />
 </p>
 
 Den handling du kommer til at bruge mest er **Start musik i en gruppe** — ét trin, der klarer alt hvad en musikscene har brug for:
@@ -109,19 +113,21 @@ Den handling du kommer til at bruge mest er **Start musik i en gruppe** — ét 
 | 🔀 **Bland / gentag / crossfade** | Lad stå på *Uændret* for ikke at røre dem. |
 | ⏱️ **Timing** | *Automatisk* (hurtigst — hver fase starter når den forrige melder klar) eller faste tidspunkter du selv sætter, vist som en tidslinje. |
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/editor-group.png" width="700" alt="Valg af kilde, hvem der forlader gruppen, og hvem der kommer med automatisk" />
+</p>
+
+Læg mærke til **Included automatically**: de rum har du aldrig skrevet ind. Du sagde *"alle undtagen stuen og garagen"*, og scenen regner resten ud — i dag, og igen den dag du sætter en ny højttaler op. 🪄
+
 ### 🎚️ Skriv den, eller træk i den — du bestemmer
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-editor-volumes-da.png" width="700" alt="Lydstyrke pr. højttaler med indtastede procenter" />
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/editor-levels.png" width="700" alt="Lydstyrke pr. højttaler med indtastede procenter" />
 </p>
 
 Hver højttaler får sin egen lydstyrke, med både skyder **og** talfelt — for en skyder er fremragende til at finde niveauet på øret og ubrugelig til at sige "tolv". 🎯 Ét klik på **Brug nuværende lydstyrker** fanger det, der allerede lyder rigtigt i huset. Ét `×` betyder *lad den her højttaler være*.
 
 ### 🛟 Og den er svær at ødelægge
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-dialog-da.png" width="700" alt="Bekræftelse med fortryd" />
-</p>
 
 Alt destruktivt spørger først — og giver dig **alligevel** en Fortryd bagefter. ↩️ Scener valideres mens du bygger: en musikscene uden gruppeleder siger det selv, ved trinnet, inden du gemmer. Intet skrives i `config.json`, så en dårlig rettelse kan aldrig vælte din bridge. 🛡️
 
@@ -130,7 +136,7 @@ Alt destruktivt spørger først — og giver dig **alligevel** en Fortryd bageft
 ## 🎁 Skabeloner: et fungerende system på cirka tredive sekunder
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-tools-da.png" width="760" alt="Skabeloner, eksport/import og backups" />
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/backup.png" width="760" alt="Skabeloner, eksport/import og backups" />
 </p>
 
 Start ikke på en tom side. Tryk **Hent de fire startscener**, og du har med det samme fire kontakter der virker — **Musik i hele huset**, **Pause alt**, **Skru op**, **Skru ned** — allerede koblet til *dine* højttalere, fordi skabelonen fylder sig selv ud fra din live husstand. 🪄
@@ -151,11 +157,7 @@ Flytter du, bygger du din bridge om, eller eksperimenterer du bare — dine scen
 
 ## 📈 Se præcis hvad der skete
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-activity-da.png" width="760" alt="Aktivitetsloggen" />
-</p>
-
-Hver kørsel, trin for trin, med **hvor lang tid hvert trin tog** og **præcis hvad hver højttaler svarede**. ⏱️ Når noget opfører sig underligt, kan du se hvorfor på få sekunder — i stedet for at gætte ud fra en logfil. Et trin over tre sekunder nævnes også ved navn i Homebridge-loggen.
+Åbn fanen **Aktivitet**, og der ligger hver kørsel, trin for trin, med **hvor lang tid hvert trin tog** og **præcis hvad hver højttaler svarede**. ⏱️ Når noget opfører sig underligt, kan du se hvorfor på få sekunder — i stedet for at gætte ud fra en logfil. Et trin over tre sekunder nævnes også ved navn i Homebridge-loggen.
 
 ---
 
