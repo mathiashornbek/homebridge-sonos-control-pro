@@ -42,11 +42,37 @@ class ControlApi {
   }
 
   async start() {
+    // A runtime file left behind by a bridge that was killed rather than shut
+    // down still names a port and a live-looking token. If the bind below then
+    // fails because something else has taken that port, the settings UI reads
+    // the stale file and hands our token to whatever is listening there now.
+    try {
+      fs.unlinkSync(this.runtimeFile);
+    } catch {
+      /* nothing to clear */
+    }
+
     this.server = http.createServer((request, response) => {
       this._handle(request, response).catch((error) => {
-        this._send(response, 500, { error: error.message || String(error) });
+        // Anything thrown in here is an unhandled rejection, and Node ends the
+        // process for those. Nothing reaches it today — every route sends and
+        // returns — but it costs one line to make sure it stays that way.
+        try {
+          if (response.headersSent || response.writableEnded) {
+            response.destroy();
+            return;
+          }
+          this._send(response, error?.status || 500, {
+            error: error?.message || String(error) || 'Internal error',
+          });
+        } catch {
+          response.destroy?.();
+        }
       });
     });
+    // Without this a client that opens a chunked request and never finishes it
+    // parks a handler, holding whatever it has buffered, for five minutes.
+    this.server.requestTimeout = 15000;
 
     await new Promise((resolve, reject) => {
       const onError = (error) => {
@@ -72,7 +98,7 @@ class ControlApi {
     });
 
     this.actualPort = this.server.address().port;
-    fs.mkdirSync(this.dir, { recursive: true });
+    fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     fs.writeFileSync(
       this.runtimeFile,
       JSON.stringify(
@@ -88,6 +114,17 @@ class ControlApi {
       ),
       { mode: 0o600 },
     );
+    // `mode` on writeFileSync only applies when the file is *created*. On an
+    // existing one it is ignored — so a runtime.json that came back 0644 from a
+    // backup, a copy without -p, or a trip through a filesystem with no modes
+    // stayed 0644 for every start after that, with a live token in it. The test
+    // that was meant to cover this wrote a fresh file every time, which is the
+    // one case that already worked.
+    try {
+      fs.chmodSync(this.runtimeFile, 0o600);
+    } catch {
+      /* a filesystem without modes: nothing to do */
+    }
     this.log.debug?.(t('log.apiListening', { port: this.actualPort }));
     return this.actualPort;
   }
@@ -121,13 +158,25 @@ class ControlApi {
     let size = 0;
     for await (const chunk of request) {
       size += chunk.length;
-      if (size > 8 * 1024 * 1024) throw new Error(t('error.tooLarge'));
+      if (size > 8 * 1024 * 1024) throw Object.assign(new Error(t('error.tooLarge')), { status: 413 });
       chunks.push(chunk);
     }
     if (chunks.length === 0) return {};
     const raw = Buffer.concat(chunks).toString('utf8');
     if (!raw.trim()) return {};
-    return JSON.parse(raw);
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      // A malformed body is the client's mistake, not ours. Reported as a 500
+      // it read as "the bridge is broken" in the settings page.
+      throw Object.assign(new Error(error.message), { status: 400 });
+    }
+    // `null`, a number or a string are all valid JSON and none of them is a
+    // request. Every handler does a bare property read on this: `null` gave a
+    // 500 with an internal expression in it, and `123` quietly created an empty
+    // scene and pushed it to Apple Home with a 200.
+    return parsed !== null && typeof parsed === 'object' ? parsed : {};
   }
 
   /** @private */
@@ -295,8 +344,19 @@ class ControlApi {
     }
 
     if (route === 'PUT /scenes') {
-      platform.store.replaceAll(body.scenes || []);
-      if (body.settings) platform.store.settings = body.settings;
+      // `body.scenes || []` turned a missing key into "delete everything". A
+      // client saving only its settings, or one that misspelled the key, wiped
+      // every scene and unregistered every switch — with a 200 in reply. Note
+      // that a *wrong type* already failed closed inside replaceAll; it was
+      // only the falsy case that quietly escalated.
+      if (!Array.isArray(body.scenes)) {
+        this._send(response, 400, { error: t('error.scenesNotAList') });
+        return;
+      }
+      platform.store.replaceAll(body.scenes);
+      if (body.settings && typeof body.settings === 'object' && !Array.isArray(body.settings)) {
+        platform.store.settings = body.settings;
+      }
       await platform.store.save();
       platform.syncAccessories();
       this._send(response, 200, { scenes: platform.store.list() });
@@ -304,7 +364,15 @@ class ControlApi {
     }
 
     if (route === 'POST /scenes') {
-      const scene = platform.store.upsert(body.scene || {});
+      // Saving a scene means sending one. Defaulting to `{}` meant a body that
+      // was not a request at all — a bare number, an empty object — quietly
+      // created a blank scene and pushed a switch for it into Apple Home, with
+      // a 200 in reply.
+      if (!body.scene || typeof body.scene !== 'object' || Array.isArray(body.scene)) {
+        this._send(response, 400, { error: t('error.sceneMissing') });
+        return;
+      }
+      const scene = platform.store.upsert(body.scene);
       await platform.store.save();
       platform.syncAccessories();
       this._send(response, 200, { scene });
@@ -335,10 +403,14 @@ class ControlApi {
     }
 
     if (route === 'POST /scenes/import') {
+      if (!Array.isArray(body.scenes)) {
+        this._send(response, 400, { error: t('error.scenesNotAList') });
+        return;
+      }
       const added =
         body.mode === 'replace'
-          ? platform.store.replaceAll(body.scenes || [])
-          : platform.store.merge(body.scenes || []);
+          ? platform.store.replaceAll(body.scenes)
+          : platform.store.merge(body.scenes);
       await platform.store.save();
       platform.syncAccessories();
       this._send(response, 200, {

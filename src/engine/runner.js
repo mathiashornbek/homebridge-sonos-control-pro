@@ -16,6 +16,8 @@ const { t } = require('../i18n');
  */
 
 const DEFAULT_MAX_RUNTIME_MS = 60000;
+/** Above this setTimeout fires immediately instead of waiting. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 function sleep(ms, signal) {
   if (ms <= 0) return Promise.resolve();
@@ -141,9 +143,16 @@ class SceneRunner extends EventEmitter {
    */
   run(sceneId, options = {}) {
     const branch = options.branch === 'off' ? 'off' : 'on';
-    const inFlight = this.runsFor(sceneId).find(
-      (entry) => entry.exclusive && entry.branch === branch && entry.promise,
-    );
+    // A scene chaining back to one that is already in its own call stack is a
+    // loop, and _run is what detects and reports that. Handing back the
+    // in-flight promise here instead would make the scene wait for itself, and
+    // it would wait for ever.
+    const recursive = options.stack ? options.stack.has(sceneId) : false;
+    const inFlight = recursive
+      ? null
+      : this.runsFor(sceneId).find(
+          (entry) => entry.exclusive && entry.branch === branch && entry.promise,
+        );
 
     if (inFlight) {
       this.log.info(t('log.sceneAlreadyRunning', { name: inFlight.name }));
@@ -173,8 +182,14 @@ class SceneRunner extends EventEmitter {
       // Re-triggering the same scene the other way round (on → off) is a new
       // intention, so the old direction is abandoned. Overlapping runs of a
       // *non*-exclusive scene are left alone: two volume nudges must both land.
-      for (const entry of this.runsFor(sceneId)) {
-        this._cancelEntry(entry, t('reason.newPress'));
+      // A run that another scene asked for is not a repeat press: two scenes
+      // that both end by chaining to "Everything off" must not shoot each
+      // other's copy of it half-finished. Those are de-duplicated in run()
+      // instead, so the second caller waits for the first one's result.
+      if (stack.size === 0) {
+        for (const entry of this.runsFor(sceneId)) {
+          this._cancelEntry(entry, t('reason.newPress'));
+        }
       }
 
       // Two scenes that both decide what plays and who is grouped must not run
@@ -230,6 +245,13 @@ class SceneRunner extends EventEmitter {
     };
 
     try {
+      // Discovery first. The scene's condition asks the speakers what they are
+      // doing, and asking before the household is known is asking nobody: every
+      // "is nothing playing here?" came back true for the first few seconds
+      // after a restart, so the scenes written specifically not to interrupt
+      // music were the ones that interrupted it.
+      await this.system.ensureReady().catch(() => {});
+
       const steps = await this._selectSteps(scene, branch, record);
       this.log.info(
         t(branch === 'off' ? 'log.sceneStartOff' : 'log.sceneStart', {
@@ -239,20 +261,20 @@ class SceneRunner extends EventEmitter {
         }),
       );
 
-      // A scene pressed right after a reboot waits for discovery instead of
-      // failing on "the speaker does not exist".
-      await this.system.ensureReady().catch(() => {});
-
       const context = {
         system: this.system,
         log: this.log,
+        sceneId,
         signal: controller.signal,
         snapshots: this.snapshots,
         sleep: (ms) => sleep(ms, controller.signal),
         runScene: async (targetId) => {
           const nested = new Set(stack);
           nested.add(sceneId);
-          const result = await this._run(targetId, {
+          // Through run(), not _run(): that is where a scene already in flight
+          // is recognised, so two parents chaining to the same child both wait
+          // for the one copy of it instead of racing to restart it.
+          const result = await this.run(targetId, {
             branch: 'on',
             trigger: t('trigger.scene', { name: scene.name }),
             stack: nested,
@@ -268,7 +290,7 @@ class SceneRunner extends EventEmitter {
 
       const timeout = setTimeout(() => {
         controller.abort(t('reason.timeout'));
-      }, scene.maxRuntimeMs || DEFAULT_MAX_RUNTIME_MS);
+      }, this._budgetFor(scene, steps));
       if (timeout.unref) timeout.unref();
 
       try {
@@ -319,6 +341,35 @@ class SceneRunner extends EventEmitter {
       this.emit('finish', record);
       settle({ ...record, sceneName: scene.name });
     }
+  }
+
+  /**
+   * @private How long this run is allowed to take.
+   *
+   * The ceiling used to be a flat sixty seconds, and the scene's own waits were
+   * not counted against it. There is no fade action, so the way anyone writes a
+   * gentle wake-up is `setVolume 8`, `playFavorite`, `wait 90`, `setVolume 30` —
+   * and that scene was cut off in the middle, every time: the bedroom left at a
+   * whisper, the switch on, the log saying "cancelled". The setting that would
+   * have raised the ceiling was not in the editor either.
+   *
+   * So the budget now covers what the scene actually asked to wait for, plus
+   * half a minute for the speakers to answer.
+   */
+  _budgetFor(scene, steps) {
+    let sequential = 0;
+    let longest = 0;
+    for (const step of steps) {
+      const seconds = step.action === 'wait' ? Number(step.params?.seconds) : 0;
+      const wait = Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : 0;
+      const own = (Number(step.delayMs) || 0) + wait;
+      sequential += own;
+      if (own > longest) longest = own;
+    }
+    const planned = scene.mode === 'sequential' ? sequential : longest;
+    const configured = Number(scene.maxRuntimeMs);
+    const base = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_MAX_RUNTIME_MS;
+    return Math.min(MAX_TIMER_MS, Math.max(1000, base, planned + 30000));
   }
 
   /** @private Pick the right list of steps and evaluate the scene condition. */
@@ -415,6 +466,14 @@ class SceneRunner extends EventEmitter {
       );
     }
     if (definition.targets !== 'none' && resolved.players.length === 0) {
+      // Every speaker this step names has gone — the usual cause is a room
+      // renamed in the Sonos app. That is not a step that had nothing to do; it
+      // is a step that could not find its target, and recording it as a success
+      // meant the scene went green, a stateful switch stayed on, and the only
+      // trace was a single warning line in the log.
+      if (resolved.missing.length > 0) {
+        throw new Error(t('error.speakersGone', { names: resolved.missing.join(', ') }));
+      }
       entry.skipped = true;
       entry.ok = true;
       entry.detail =

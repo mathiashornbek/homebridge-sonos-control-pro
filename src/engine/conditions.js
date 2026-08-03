@@ -13,16 +13,27 @@ const { t, tFirst } = require('../i18n');
  * from `condition.<id>.<key>` falling back to `condition.field.<key>`.
  */
 
-/** Is this player — or the group it belongs to — currently producing sound? */
+/**
+ * Is this player — or the group it belongs to — currently producing sound?
+ *
+ * Three answers, not two. "I could not ask" used to come back as `false`, and
+ * `false` is a definite answer — so `isNotPlaying` said *true* for a speaker
+ * that had simply dropped one request on a flaky link, and an evening scene
+ * gated on "only if nothing is playing in the living room" took over the
+ * household in the middle of an album. `targets.js` already makes the opposite
+ * choice for the same question and writes down why: doing nothing is safer.
+ *
+ * @returns {Promise<boolean|null>} null when the speaker could not be asked.
+ */
 async function playerIsPlaying(system, name) {
   const player = system.resolve(name);
-  if (!player) return false;
+  if (!player) return null;
   const coordinator = system.coordinatorFor(player) || player;
   try {
     const info = await coordinator.getTransportInfo();
     return PLAYING_STATES.has(info.state);
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -58,7 +69,8 @@ const CONDITIONS = {
   isNotPlaying: {
     params: [{ key: 'player', type: 'player', required: true }],
     async run(system, params) {
-      return !(await playerIsPlaying(system, params.player));
+      const playing = await playerIsPlaying(system, params.player);
+      return playing === null ? null : !playing;
     },
   },
 
@@ -67,24 +79,30 @@ const CONDITIONS = {
     async run(system) {
       await system.refreshTopology(undefined, { maxAgeMs: 750 }).catch(() => {});
       const coordinators = system.list().filter((player) => system.coordinatorFor(player) === player);
+      // No household at all is not "nothing is playing" — it is not knowing.
+      if (coordinators.length === 0) return null;
       const results = await Promise.all(
         coordinators.map(async (coordinator) => {
           try {
             const info = await coordinator.getTransportInfo();
             return PLAYING_STATES.has(info.state);
           } catch {
-            return false;
+            return null;
           }
         }),
       );
-      return results.some(Boolean);
+      if (results.some((state) => state === true)) return true;
+      // If not one speaker answered we know nothing, rather than knowing that
+      // the house is quiet.
+      return results.every((state) => state === null) ? null : false;
     },
   },
 
   nonePlaying: {
     params: [],
     async run(system) {
-      return !(await CONDITIONS.anyPlaying.run(system, {}));
+      const any = await CONDITIONS.anyPlaying.run(system, {});
+      return any === null ? null : !any;
     },
   },
 
@@ -95,9 +113,9 @@ const CONDITIONS = {
     ],
     async run(system, params) {
       const player = system.resolve(params.player);
-      if (!player) return false;
+      if (!player) return null;
       const volume = await player.getVolume().catch(() => null);
-      return volume !== null && volume > Number(params.volume);
+      return volume === null ? null : volume > Number(params.volume);
     },
   },
 
@@ -108,9 +126,9 @@ const CONDITIONS = {
     ],
     async run(system, params) {
       const player = system.resolve(params.player);
-      if (!player) return false;
+      if (!player) return null;
       const volume = await player.getVolume().catch(() => null);
-      return volume !== null && volume < Number(params.volume);
+      return volume === null ? null : volume < Number(params.volume);
     },
   },
 
@@ -122,7 +140,7 @@ const CONDITIONS = {
     async run(system, params) {
       await system.refreshTopology(undefined, { maxAgeMs: 750 }).catch(() => {});
       const player = system.resolve(params.player);
-      if (!player) return false;
+      if (!player) return null;
       const coordinator = system.coordinatorFor(player);
       if (!params.coordinator) return system.groupMembers(player).length > 1;
       const wanted = system.resolve(params.coordinator);
@@ -145,12 +163,19 @@ const CONDITIONS = {
   },
 };
 
-/** Evaluate a scene's condition. Missing or unknown conditions mean "run it". */
+/**
+ * Evaluate a scene's condition.
+ *
+ * A condition that is absent or of a type we do not know means "run it" — that
+ * is a scene with no gate on it. A condition that *is* known but could not be
+ * answered means "not met", and the scene takes its else-branch: a gate we
+ * cannot read is a gate we do not walk through.
+ */
 async function evaluateCondition(system, condition) {
   if (!condition || !condition.type || condition.type === 'always') return true;
   const definition = CONDITIONS[condition.type];
   if (!definition) return true;
-  return Boolean(await definition.run(system, condition.params || {}));
+  return (await definition.run(system, condition.params || {})) === true;
 }
 
 /** Catalogue for the UI, translated on every request. */

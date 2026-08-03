@@ -1,5 +1,6 @@
 'use strict';
 
+const { performance: perf } = require('node:perf_hooks');
 const { resolveTargets, describeTarget } = require('./targets');
 const { t, tFirst } = require('../i18n');
 
@@ -66,6 +67,31 @@ function toCoordinators(system, players) {
  * — so an abandoned scene could still finish setting the music, and beat the
  * scene that replaced it.
  */
+/**
+ * Which snapshot drawer a step uses.
+ *
+ * The memory is shared across every scene, and the slot defaulted to the
+ * literal string "default" — so a doorbell scene and an alarm scene, each left
+ * on the default, silently wrote over one another and each restored the other's
+ * rooms. Naming a slot explicitly is how you ask for that sharing, and it still
+ * works. Leaving it blank now means "mine", which is what it looks like it
+ * means.
+ */
+function snapshotSlot(ctx, step) {
+  const explicit = String(step.params?.slot || '').trim();
+  if (explicit) return explicit;
+  return ctx.sceneId ? `default:${ctx.sceneId}` : 'default';
+}
+
+/**
+ * A stopwatch that a clock correction cannot move.
+ * @returns {() => number} milliseconds since this was called.
+ */
+function monotonic() {
+  const from = perf.now();
+  return () => perf.now() - from;
+}
+
 function inheritSignal(source, target) {
   if (!target || !source?._signal || target === source) return target;
   return target.withSignal(source._signal);
@@ -119,6 +145,13 @@ async function forEachPlayer(players, log, worker) {
 
 function summarise(players, failed, skipped, verb) {
   const done = players.length - failed.length;
+  // One speaker of six failing is a partial success, and stays one. *Every*
+  // speaker failing is not: the step used to return "Volume 11% on 0 speakers ·
+  // failed: …" and be recorded as ok, so a step marked "stop the scene if this
+  // fails" did not stop it, and the run went green with nothing done at all.
+  if (players.length > 0 && done === 0) {
+    throw new Error(t('error.everyPlayerFailed', { names: failed.join(', ') }));
+  }
   const parts = [
     done === 1 ? t('result.onOneSpeaker', { verb }) : t('result.onSpeakers', { verb, done }),
   ];
@@ -252,6 +285,13 @@ const ACTIONS = {
       const params = step.params || {};
       const system = ctx.system;
       const startedAt = Date.now();
+      // Elapsed time is measured on the monotonic clock, not the wall clock.
+      // A box that has just booted, or a VM coming back from a suspend, gets
+      // its clock stepped by NTP — and with Date.now() a backward step stretched
+      // every phase by the size of the correction, while a forward step
+      // collapsed all three into the same instant. That collapse is exactly the
+      // shock-volume moment fixed timing exists to prevent.
+      const elapsed = monotonic();
       const fixedTiming = (params.timing || 'auto') === 'fixed';
       const bind = (player) => (player && ctx.signal ? player.withSignal(ctx.signal) : player);
 
@@ -261,7 +301,7 @@ const ACTIONS = {
       const phaseAt = async (offsetMs) => {
         if (ctx.signal?.aborted) throw Object.assign(new Error(t('error.aborted')), { aborted: true });
         if (!fixedTiming) return;
-        await ctx.sleep(Math.max(0, (Number(offsetMs) || 0) - (Date.now() - startedAt)));
+        await ctx.sleep(Math.max(0, (Number(offsetMs) || 0) - elapsed()));
       };
 
       await system.ensureReady().catch(() => {});
@@ -270,6 +310,31 @@ const ACTIONS = {
       const coordinatorRoom = system.resolve(params.coordinator);
       const coordinator = bind(coordinatorRoom);
       if (!coordinator) throw new Error(t('error.coordinatorGone', { name: params.coordinator }));
+
+      // Everything that can be decided without touching a speaker is decided
+      // here, before anything is touched.
+      //
+      // The source used to be looked up inside the opening phase — after the
+      // leader and the leavers had been pulled out of their groups and every
+      // volume had been turned down ready for the music. So a favourite that
+      // had been renamed, or a leader that happened to be mid-reboot, left the
+      // household ungrouped, silent, and set to listening volume, with whatever
+      // had been playing still playing at a whisper. Failing before anything
+      // has changed is a far better outcome than failing halfway.
+      //
+      // The default volume is validated here for a subtler reason: setVolume
+      // checks its argument *synchronously*, so an unusable value threw before
+      // there was a promise for the per-speaker .catch to attach to. The guard
+      // could never fire, and one bad number took the whole step down after the
+      // groups had already been broken.
+      const source = params.source || { type: 'keep' };
+      const wantsSource = Boolean(source.type) && source.type !== 'keep';
+      const item = wantsSource ? await resolveSource(system, source) : null;
+      const hasDefault =
+        params.defaultVolume !== undefined && params.defaultVolume !== null && params.defaultVolume !== '';
+      const fallbackVolume = hasDefault
+        ? requireNumber(params.defaultVolume, 'param.volume', 0, 100)
+        : null;
 
       const unknown = [];
       const pick = (names) => {
@@ -360,16 +425,24 @@ const ACTIONS = {
         );
       }
 
-      const source = params.source || { type: 'keep' };
-      if (source.type && source.type !== 'keep') {
+      let sourceError = null;
+      if (item) {
         opening.push(async () => {
-          const item = await resolveSource(system, source);
-          const how = await system.playOn(coordinator, item);
-          notes.push(
-            how === 'reused'
-              ? t('describe.continuedPlaying', { title: item.title })
-              : t('describe.playingNow', { title: item.title }),
-          );
+          try {
+            const how = await system.playOn(coordinator, item);
+            notes.push(
+              how === 'reused'
+                ? t('describe.continuedPlaying', { title: item.title })
+                : t('describe.playingNow', { title: item.title }),
+            );
+          } catch (error) {
+            // Remembered, not thrown. A leader that will not take the source is
+            // a bad outcome; a leader that will not take the source *and* a
+            // household left half-taken-apart because the grouping phase never
+            // ran is a worse one. The step still ends by reporting the failure.
+            sourceError = error;
+            notes.push(t('result.sourceFailed', { message: error.message }));
+          }
         });
       } else if (params.startPlaying !== false) {
         opening.push(() => coordinator.play().catch(() => {}));
@@ -384,13 +457,11 @@ const ACTIONS = {
       // Fixed timing keeps the source first, because that is what choosing it
       // asks for.
       const volumeMap = params.volumes || {};
-      const hasDefault =
-        params.defaultVolume !== undefined && params.defaultVolume !== null && params.defaultVolume !== '';
       const volumeTargets = [coordinator, ...members];
       const volumeWork = [];
       for (const player of volumeTargets) {
         const explicit = findVolumeFor(volumeMap, player, system);
-        const value = explicit !== null ? explicit : hasDefault ? Number(params.defaultVolume) : null;
+        const value = explicit !== null ? explicit : fallbackVolume;
         if (value === null) continue;
         volumeWork.push(
           (async () => {
@@ -465,7 +536,10 @@ const ACTIONS = {
       }
 
       notes.push(`${Date.now() - startedAt} ms`);
-      return `${coordinator.name}: ${notes.join(' · ')}`;
+      const summary = `${coordinator.name}: ${notes.join(' · ')}`;
+      // The grouping has been done; now say that the music was not.
+      if (sourceError) throw new Error(summary);
+      return summary;
     },
   },
 
@@ -850,9 +924,13 @@ const ACTIONS = {
     targets: 'none',
     params: [{ key: 'seconds', type: 'number', required: true, min: 0, max: 300, step: 0.5 }],
     async run(ctx, step) {
-      const ms = Math.max(0, Number(step.params.seconds) * 1000);
-      await ctx.sleep(ms);
-      return t('result.waited', { seconds: step.params.seconds });
+      // A blank field used to become a zero-second wait that reported success.
+      // In a doorbell scene — snapshot, announce, wait, restore — that means the
+      // restore fires while the announcement is still loading, and the log line
+      // reads "Waited s". A step that is not finished has to say so.
+      const seconds = requireNumber(step.params.seconds, 'param.seconds', 0, 300);
+      await ctx.sleep(seconds * 1000);
+      return t('result.waited', { seconds });
     },
   },
 
@@ -861,7 +939,7 @@ const ACTIONS = {
     targets: 'multi',
     params: [{ key: 'slot', type: 'text', default: 'default' }],
     async run(ctx, step, players) {
-      const slot = step.params.slot || 'default';
+      const slot = snapshotSlot(ctx, step);
       const entries = await Promise.all(
         players.map(async (player) => {
           const coordinator = inheritSignal(player, ctx.system.coordinatorFor(player) || player);
@@ -888,8 +966,21 @@ const ACTIONS = {
           };
         }),
       );
-      ctx.snapshots.set(slot, { savedAt: Date.now(), entries });
-      return t('result.snapshotSaved', { count: entries.length, slot });
+      // Every read above is `.catch(() => null)`, which is right while the
+      // speakers are merely slow — but a snapshot cancelled halfway answers
+      // null for everything, and storing *that* wiped a good snapshot and left
+      // the matching restore rebuilding groups from a record with no volumes
+      // and no sources in it. A snapshot that learned nothing is not a snapshot.
+      if (ctx.signal?.aborted) {
+        throw Object.assign(new Error(t('error.aborted')), { aborted: true });
+      }
+      const useful = entries.filter(
+        (entry) => entry.volume !== null || entry.muted !== null || entry.uri || entry.state,
+      );
+      if (useful.length === 0) throw new Error(t('error.snapshotEmpty', { slot }));
+
+      ctx.snapshots.set(slot, { savedAt: Date.now(), entries: useful });
+      return t('result.snapshotSaved', { count: useful.length, slot });
     },
   },
 
@@ -902,58 +993,77 @@ const ACTIONS = {
       { key: 'restorePlayback', type: 'boolean', default: true },
     ],
     async run(ctx, step) {
-      const slot = step.params.slot || 'default';
+      const slot = snapshotSlot(ctx, step);
       const snapshot = ctx.snapshots.get(slot);
       if (!snapshot) throw new Error(t('error.noSnapshot', { slot }));
 
-      const byUuid = new Map(ctx.system.list().map((player) => [player.uuid, player]));
+      // `targets: 'none'` means the runner hands this action nothing, so it
+      // fetches the players itself — and it used to fetch them *raw*, with no
+      // signal on them. Nothing here read ctx.signal either. A doorbell scene
+      // that was superseded therefore carried on regardless: measured at forty
+      // SOAP commands over 1.2 seconds *after* the cancel, pulling every room
+      // out of the group the new scene was busy building, and then setting last
+      // night's volumes on top. The user heard the party form and fall apart,
+      // and the activity feed said it had all gone well.
+      const stopped = () => Boolean(ctx.signal?.aborted);
+      const bind = (player) => (player && ctx.signal ? player.withSignal(ctx.signal) : player);
+      const byUuid = new Map(ctx.system.list().map((player) => [player.uuid, bind(player)]));
       const coordinators = snapshot.entries.filter((entry) => entry.isCoordinator);
       const followers = snapshot.entries.filter((entry) => !entry.isCoordinator);
 
       if (step.params.restorePlayback !== false) {
         for (const entry of coordinators) {
+          if (stopped()) break;
           const player = byUuid.get(entry.uuid);
           if (!player) continue;
           try {
             await player.leaveGroup();
+            // Book the change, the way every other grouping mutation does.
+            // Skipping it left the model believing the old groups were still
+            // there, and the next scene to start within the topology cache's
+            // window skipped exactly the joins it needed.
+            ctx.system.noteGrouping(entry.uuid, entry.uuid);
             if (entry.uri) await player.setAVTransportURI(entry.uri, entry.metadata);
           } catch (error) {
             ctx.log.debug?.(`  ↳ ${entry.name}: ${error.message}`);
           }
         }
         for (const entry of followers) {
+          if (stopped()) break;
           const player = byUuid.get(entry.uuid);
           if (!player) continue;
           try {
             await player.joinGroup(entry.coordinatorUuid);
+            ctx.system.noteGrouping(entry.uuid, entry.coordinatorUuid);
           } catch (error) {
             ctx.log.debug?.(`  ↳ ${entry.name}: ${error.message}`);
           }
         }
       }
 
-      if (step.params.restoreVolume !== false) {
+      if (step.params.restoreVolume !== false && !stopped()) {
         await Promise.allSettled(
           snapshot.entries.map(async (entry) => {
             const player = byUuid.get(entry.uuid);
-            if (!player) return;
+            if (!player || stopped()) return;
             if (entry.volume !== null) await player.setVolume(entry.volume);
             if (entry.muted !== null) await player.setMute(entry.muted);
           }),
         );
       }
 
-      if (step.params.restorePlayback !== false) {
+      if (step.params.restorePlayback !== false && !stopped()) {
         await Promise.allSettled(
           coordinators.map(async (entry) => {
             const player = byUuid.get(entry.uuid);
-            if (!player || entry.state !== 'PLAYING') return;
+            if (!player || entry.state !== 'PLAYING' || stopped()) return;
             if (entry.track > 1) await player.seekTrack(entry.track).catch(() => {});
             await player.play().catch(() => {});
           }),
         );
       }
 
+      if (stopped()) throw Object.assign(new Error(t('error.aborted')), { aborted: true });
       return t('result.restored', { slot, count: snapshot.entries.length });
     },
   },
@@ -988,6 +1098,12 @@ const EXCLUSIVE_ACTIONS = new Set([
   'leaveGroup',
   'restore',
   'runScene',
+  // A toggle reads the current state and writes the opposite of it, so two
+  // overlapping runs both read "unmuted" and both write "muted" — and the house
+  // stays muted however many times the tile is tapped, until the taps stop
+  // overlapping. Deciding what plays is the criterion for this set anyway.
+  'togglePlay',
+  'toggleMute',
 ]);
 
 /** @param {string} action */
@@ -1065,6 +1181,14 @@ async function playersForStep(system, step) {
 
   const resolved = await resolveTargets(system, step.target);
   if (definition.targets === 'single') {
+    // "One speaker" plus a target of "all speakers" is not a choice, it is a
+    // missing choice — and taking the first of the list meant the step played
+    // in whichever room sorts first alphabetically, and would silently move to
+    // a different room the day someone added a speaker called Attic.
+    const type = step.target?.type || 'all';
+    if (type === 'all' || type === 'allExcept') {
+      return { players: [], missing: [t('common.allSpeakers')], skipped: resolved.skipped };
+    }
     return { ...resolved, players: resolved.players.slice(0, 1) };
   }
   return resolved;

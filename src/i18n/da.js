@@ -63,6 +63,14 @@ module.exports = {
   'log.migrateFailed': 'Kunne ikke flytte scener fra {from}/: {message}',
   'log.brokenStore':
     'Kunne ikke læse scenes.json ({message}). Filen er gemt som {backup}, og der startes med en tom liste. Brug "Gendan backup" i indstillingerne.',
+  'log.storeUnreadable':
+    'Kunne ikke åbne scenes.json ({message}). Dine scener er urørte, og der bliver ikke skrevet noget, før det er bragt i orden — tjek hvem der ejer filen, og at disken er der, og genstart så Homebridge.',
+  'log.backupFailed': 'Kunne ikke skrive en backup af scenes.json: {message}',
+  'log.saveFailed': 'Kunne ikke skrive scenes.json: {message}',
+  'log.accessoryAddFailed': 'Apple Home ville ikke tage de nye kontakter: {message}',
+  'log.accessoryRemoveFailed': 'Apple Home ville ikke slippe de gamle kontakter: {message}',
+  'log.syncSkipped':
+    'Scenerne kunne ikke læses, så kontakterne i Apple Home blev ladt i fred i stedet for at blive fjernet.',
   'log.duplicateId': 'To scener delte id {id}; "{name}" har fået et nyt.',
   'log.apiFailed':
     'Kunne ikke starte kontrol-API\'et ({message}). Indstillingerne virker stadig, men uden live-test og Sonos-oversigt.',
@@ -103,6 +111,7 @@ module.exports = {
   'error.coordinatorMissing': 'Gruppelederen "{name}" findes ikke',
   'error.nothingToPlay': 'Der er ingen URI at afspille',
   'error.noSnapshot': 'Der findes ingen gemt tilstand ved navn "{slot}"',
+  'error.snapshotEmpty': 'Ingen højttaler svarede, så der blev ikke gemt noget som "{slot}"',
   'error.sceneFailedNested': 'Scenen "{name}" fejlede',
   'error.noKnownSpeakers': 'Ingen kendte højttalere at tilføje',
   'error.invalidVolumeFor': 'Ugyldig lydstyrke for {room}',
@@ -115,6 +124,12 @@ module.exports = {
   'error.pluginSlow': 'Plugin svarede ikke i tide',
   'error.unknownPreset': 'Ukendt preset: {id}',
   'error.badBackupName': 'Ugyldigt backupnavn',
+  'error.storeDegraded':
+    'scenes.json kunne ikke læses, så der bliver ikke skrevet til den. Gendan en backup, eller ret filen og genstart Homebridge.',
+  'error.scenesNotAList': '"scenes" skal være en liste',
+  'error.unknownTargetType': 'Ukendt mål: {type}',
+  'error.speakersGone': 'Kender ikke højttaleren {names}',
+  'error.everyPlayerFailed': 'Ingen af højttalerne tog imod det: {names}',
   'error.sceneMissing': 'Scenen findes ikke',
   'error.apiMissing': 'Homebridge-API\'et mangler — plugin\'et kan ikke starte.',
   'error.playerMissing': 'Højttaleren findes ikke',
@@ -303,6 +318,7 @@ module.exports = {
   'result.volumesSet': 'lydstyrke sat på {count}',
   'result.joined': '{count} tilsluttet {player}',
   'result.joinFailed': 'kunne ikke tilslutte: {names}',
+  'result.sourceFailed': 'musikken ville ikke starte: {message}',
   'result.alreadyInPlace': '{count} var allerede på plads',
   'result.modesSet': 'afspilningstilstand sat',
 

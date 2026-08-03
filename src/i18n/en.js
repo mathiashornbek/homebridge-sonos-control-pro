@@ -63,6 +63,14 @@ module.exports = {
   'log.migrateFailed': 'Could not move scenes from {from}/: {message}',
   'log.brokenStore':
     'Could not read scenes.json ({message}). The file was kept as {backup} and an empty list was loaded. Use "Restore backup" in the settings.',
+  'log.storeUnreadable':
+    'Could not open scenes.json ({message}). Your scenes have been left exactly as they are and nothing will be written until this is sorted out — check who owns the file and that the disk is there, then restart Homebridge.',
+  'log.backupFailed': 'Could not write a backup of scenes.json: {message}',
+  'log.saveFailed': 'Could not write scenes.json: {message}',
+  'log.accessoryAddFailed': 'Apple Home would not take the new switches: {message}',
+  'log.accessoryRemoveFailed': 'Apple Home would not release the old switches: {message}',
+  'log.syncSkipped':
+    'The scenes could not be read, so the switches in Apple Home were left alone rather than removed.',
   'log.duplicateId': 'Two scenes shared the id {id}; "{name}" was given a new one.',
   'log.apiFailed':
     'Could not start the control API ({message}). The settings still work, but without live testing and the speaker view.',
@@ -102,6 +110,7 @@ module.exports = {
   'error.coordinatorMissing': 'The group leader "{name}" does not exist',
   'error.nothingToPlay': 'There is no URI to play',
   'error.noSnapshot': 'There is no saved state called "{slot}"',
+  'error.snapshotEmpty': 'No speaker answered, so nothing was saved as "{slot}"',
   'error.sceneFailedNested': 'The scene "{name}" failed',
   'error.noKnownSpeakers': 'No known speakers to add',
   'error.invalidVolumeFor': 'Invalid volume for {room}',
@@ -114,6 +123,12 @@ module.exports = {
   'error.pluginSlow': 'The plugin did not answer in time',
   'error.unknownPreset': 'Unknown preset: {id}',
   'error.badBackupName': 'Invalid backup name',
+  'error.storeDegraded':
+    'scenes.json could not be read, so nothing is being written to it. Restore a backup, or fix the file and restart Homebridge.',
+  'error.scenesNotAList': '"scenes" has to be a list',
+  'error.unknownTargetType': 'Unknown target: {type}',
+  'error.speakersGone': 'No such speaker: {names}',
+  'error.everyPlayerFailed': 'None of the speakers accepted this: {names}',
   'error.sceneMissing': 'That scene does not exist',
   'error.apiMissing': 'The Homebridge API is missing — the plugin cannot start.',
   'error.playerMissing': 'That speaker does not exist',
@@ -301,6 +316,7 @@ module.exports = {
   'result.volumesSet': 'level set on {count}',
   'result.joined': '{count} joined {player}',
   'result.joinFailed': 'could not join: {names}',
+  'result.sourceFailed': 'the music would not start: {message}',
   'result.alreadyInPlace': '{count} were already in place',
   'result.modesSet': 'playback mode set',
 

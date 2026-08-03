@@ -1680,3 +1680,461 @@ test('a speaker that moves port is followed, whichever path notices', async (t) 
 
   assert.equal(h.system.resolve('Kitchen').port, originalPort + 1, 'rediscovery must carry the port over');
 });
+
+// ─────────────────────────────────────────────── what the review turned up
+//
+// Reading the engine end to end. Each of these was confirmed to fail against
+// the code as it was before the fix beside it.
+
+const { ACTIONS } = require('../src/engine/actions');
+
+/** Every SOAP call the household has answered so far. */
+function callCount(household) {
+  return household.players.reduce((total, player) => total + player.calls.length, 0);
+}
+
+function bareContext(h, signal, sceneId = 'scene-1') {
+  return {
+    system: h.system,
+    log: quietLog,
+    sceneId,
+    signal,
+    snapshots: new Map(),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    runScene: async () => 'x',
+  };
+}
+
+test('a cancelled restore stops, instead of taking the house apart behind the next scene', async (t) => {
+  const h = await harness();
+  t.after(() => h.close());
+
+  const controller = new AbortController();
+  const ctx = bareContext(h, controller.signal);
+  await ACTIONS.snapshot.run(ctx, { params: { slot: 'x' } }, h.system.list());
+
+  const before = callCount(h.household);
+  controller.abort('afløst');
+
+  await assert.rejects(() => ACTIONS.restore.run(ctx, { params: { slot: 'x' } }, []));
+  assert.equal(
+    callCount(h.household),
+    before,
+    'not one command after the cancel — the next scene is building its group',
+  );
+});
+
+test('a restore books its grouping changes, so the next scene is not deciding from a stale model', async (t) => {
+  const h = await harness();
+  t.after(() => h.close());
+
+  const ctx = bareContext(h, new AbortController().signal);
+  await ACTIONS.snapshot.run(ctx, { params: { slot: 'x' } }, h.system.list());
+
+  // Group the whole house behind one room, then put it back.
+  const kitchen = h.system.resolve('Kitchen');
+  for (const player of h.system.list()) {
+    if (player.uuid === kitchen.uuid) continue;
+    await player.joinGroup(kitchen.uuid);
+    h.system.noteGrouping(player.uuid, kitchen.uuid);
+  }
+  await ACTIONS.restore.run(ctx, { params: { slot: 'x' } }, []);
+
+  const study = h.system.resolve('Study');
+  assert.equal(
+    h.system.coordinatorFor(study)?.uuid,
+    study.uuid,
+    'the model agrees with the speakers again',
+  );
+});
+
+test('a snapshot that could not read anything is not stored over a good one', async (t) => {
+  const h = await harness();
+  t.after(() => h.close());
+
+  const ctx = bareContext(h, new AbortController().signal);
+  await ACTIONS.snapshot.run(ctx, { params: { slot: 'x' } }, h.system.list());
+  const good = ctx.snapshots.get('x');
+  assert.ok(good.entries.length > 0);
+
+  const cancelled = new AbortController();
+  const failing = bareContext(h, cancelled.signal);
+  failing.snapshots = ctx.snapshots;
+  cancelled.abort('afløst');
+
+  await assert.rejects(() => ACTIONS.snapshot.run(failing, { params: { slot: 'x' } }, h.system.list()));
+  assert.equal(ctx.snapshots.get('x'), good, 'the good snapshot is still the one on file');
+});
+
+test('two scenes that both left the slot blank do not write over each other', async (t) => {
+  const h = await harness();
+  t.after(() => h.close());
+
+  const shared = new Map();
+  const doorbell = bareContext(h, new AbortController().signal, 'doorbell');
+  const alarm = bareContext(h, new AbortController().signal, 'alarm');
+  doorbell.snapshots = shared;
+  alarm.snapshots = shared;
+
+  await ACTIONS.snapshot.run(doorbell, { params: {} }, [h.system.resolve('Study')]);
+  await ACTIONS.snapshot.run(alarm, { params: {} }, [h.system.resolve('Kitchen')]);
+
+  const restored = await ACTIONS.restore.run(doorbell, { params: {} }, []);
+  assert.match(restored, /1/, 'the doorbell restores its own room, not the alarm’s');
+  assert.equal(shared.size, 2, 'two scenes, two drawers');
+});
+
+test('a scene condition is answered by the speakers, not by an empty household', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Morgenmusik',
+        condition: { type: 'isNotPlaying', params: { player: 'Kitchen' } },
+        steps: [{ action: 'setVolume', target: { type: 'players', names: ['Study'] }, params: { volume: 40 } }],
+        elseSteps: [{ action: 'setVolume', target: { type: 'players', names: ['Study'] }, params: { volume: 7 } }],
+      },
+    ],
+  });
+  t.after(() => h.close());
+
+  h.household.byName('Kitchen').transportState = 'PLAYING';
+
+  // Nothing is known until discovery has run — which is what a scene pressed
+  // three seconds after a restart actually meets.
+  const realResolve = h.system.resolve.bind(h.system);
+  let discovered = false;
+  h.system.resolve = (name) => (discovered ? realResolve(name) : null);
+  h.system.ensureReady = async () => {
+    discovered = true;
+  };
+
+  const scene = h.sceneByName('Morgenmusik');
+  const result = await h.runner.run(scene.id, { trigger: 'test' });
+
+  assert.equal(result.conditionResult, false, 'the kitchen is playing, so the gate is shut');
+  assert.equal(h.household.byName('Study').volume, 7, 'and the scene took its else-branch');
+});
+
+test('a speaker that cannot be asked does not count as a speaker that is quiet', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Aftenradio',
+        condition: { type: 'isNotPlaying', params: { player: 'Living Room' } },
+        steps: [{ action: 'setVolume', target: { type: 'players', names: ['Study'] }, params: { volume: 55 } }],
+        elseSteps: [],
+      },
+    ],
+  });
+  t.after(() => h.close());
+
+  h.household.failOn('Living Room', 'GetTransportInfo', 501);
+
+  const scene = h.sceneByName('Aftenradio');
+  const result = await h.runner.run(scene.id, { trigger: 'test' });
+
+  assert.equal(result.conditionResult, false, '"I could not ask" is not "nothing is playing"');
+  assert.notEqual(h.household.byName('Study').volume, 55);
+});
+
+test('a step whose speakers have all gone is a failure, not a quiet success', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Omdøbt',
+        steps: [
+          {
+            action: 'setVolume',
+            target: { type: 'players', names: ['Soveværelse'] },
+            params: { volume: 30 },
+          },
+        ],
+      },
+    ],
+  });
+  t.after(() => h.close());
+
+  const result = await h.runner.run(h.sceneByName('Omdøbt').id, { trigger: 'test' });
+  assert.equal(result.ok, false, 'the room was renamed in Sonos; the scene did nothing');
+  assert.equal(result.steps[0].ok, false);
+});
+
+test('a step every speaker refused stops a scene that asked to be stopped', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Stop ved fejl',
+        mode: 'sequential',
+        steps: [
+          { action: 'setVolume', target: { type: 'all' }, params: { volume: 11 }, stopOnError: true },
+          { action: 'setVolume', target: { type: 'all' }, params: { volume: 80 } },
+        ],
+      },
+    ],
+  });
+  t.after(() => h.close());
+
+  for (const player of h.household.players) h.household.failOn(player.name, 'SetVolume', 402);
+  const before = h.household.byName('Study').volume;
+
+  const result = await h.runner.run(h.sceneByName('Stop ved fejl').id, { trigger: 'test' });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.steps.length, 1, 'the second step never ran');
+  assert.equal(h.household.byName('Study').volume, before);
+});
+
+test('a wait with nothing in the field is refused instead of waiting no time at all', async (t) => {
+  const h = await harness({
+    scenes: [{ name: 'Dørklokke', mode: 'sequential', steps: [{ action: 'wait', params: { seconds: '' } }] }],
+  });
+  t.after(() => h.close());
+
+  const result = await h.runner.run(h.sceneByName('Dørklokke').id, { trigger: 'test' });
+  assert.equal(result.ok, false, 'a step that is not finished has to say so');
+});
+
+test('the time budget covers the waits the scene actually asked for', async (t) => {
+  const h = await harness();
+  t.after(() => h.close());
+
+  const budget = h.runner._budgetFor({ mode: 'sequential' }, [
+    { action: 'setVolume', delayMs: 0, params: {} },
+    { action: 'wait', delayMs: 0, params: { seconds: 90 } },
+    { action: 'setVolume', delayMs: 0, params: {} },
+  ]);
+
+  assert.ok(budget > 90000, `a 90-second wait must not be cut off by a 60-second ceiling (${budget} ms)`);
+});
+
+test('a target type nobody recognises reaches nobody, rather than everybody', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Nattilstand',
+        // "player" instead of "players" — a typo that reads as correct.
+        steps: [
+          { action: 'setVolume', target: { type: 'player', names: ['Study'] }, params: { volume: 55 } },
+        ],
+      },
+    ],
+  });
+  t.after(() => h.close());
+
+  const volumes = h.household.players.map((player) => player.volume);
+  const result = await h.runner.run(h.sceneByName('Nattilstand').id, { trigger: 'test' });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(
+    h.household.players.map((player) => player.volume),
+    volumes,
+    'at three in the morning this was the whole house waking up',
+  );
+});
+
+test('a one-speaker action left on "all speakers" refuses rather than guessing', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Radio',
+        steps: [{ action: 'playFavorite', target: { type: 'all' }, params: { favorite: fixture.FAVORITES[0].title } }],
+      },
+    ],
+  });
+  t.after(() => h.close());
+
+  const result = await h.runner.run(h.sceneByName('Radio').id, { trigger: 'test' });
+  assert.equal(result.ok, false, 'otherwise it plays in whichever room sorts first');
+});
+
+test('a mute tile tapped twice at once ends up muted once, not not-at-all', async (t) => {
+  const h = await harness({
+    scenes: [
+      { name: 'Lyd fra', steps: [{ action: 'toggleMute', target: { type: 'players', names: ['Study'] } }] },
+    ],
+  });
+  t.after(() => h.close());
+
+  h.household.byName('Study').muted = false;
+  // Real speakers take a moment to answer, which is what makes the read and the
+  // write of a toggle two separate events that can interleave.
+  h.household.latencyMs = 12;
+  const scene = h.sceneByName('Lyd fra');
+  await Promise.all([
+    h.runner.run(scene.id, { trigger: 'test' }),
+    h.runner.run(scene.id, { trigger: 'test' }),
+  ]);
+
+  const writes = h.household
+    .byName('Study')
+    .calls.filter((call) => call.action === 'SetMute').length;
+  assert.equal(writes, 1, 'two taps that overlap are one press, not two reads and two writes');
+  assert.equal(h.household.byName('Study').muted, true);
+});
+
+test('a child scene two parents both chain to is never left half-done', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Alt slukkes',
+        mode: 'sequential',
+        // `leaveGroup` is one of the actions that decide who is grouped with
+        // whom, so two runs of this scene must never overlap — which is exactly
+        // why the second parent used to shoot the first parent's copy of it.
+        // The wait keeps it in flight long enough for that to happen.
+        steps: [
+          { action: 'wait', params: { seconds: 0.3 } },
+          { action: 'leaveGroup', target: { type: 'all' } },
+        ],
+      },
+      { name: 'Går hjemmefra', steps: [{ action: 'runScene', params: { sceneId: '' } }] },
+      { name: 'Godnat', steps: [{ action: 'runScene', params: { sceneId: '' } }] },
+    ],
+  });
+  t.after(() => h.close());
+
+  const child = h.sceneByName('Alt slukkes');
+  for (const name of ['Går hjemmefra', 'Godnat']) {
+    const parent = h.sceneByName(name);
+    parent.steps[0].params.sceneId = child.id;
+    // Both parents are allowed to run at once; otherwise the second press
+    // supersedes the first before its chain ever reaches the child, and the
+    // situation this is about never arises.
+    parent.allowConcurrent = true;
+  }
+
+  const [a, b] = await Promise.all([
+    h.runner.run(h.sceneByName('Går hjemmefra').id, { trigger: 'test' }),
+    h.runner.run(h.sceneByName('Godnat').id, { trigger: 'test' }),
+  ]);
+
+  assert.equal(a.ok, true);
+  assert.equal(b.ok, true);
+  const childRuns = h.runner.history.filter((record) => record.sceneId === child.id);
+  assert.equal(childRuns.length, 1, 'one run of the child, shared — not one shot and one restarted');
+  assert.equal(childRuns[0].ok, true, 'and it was allowed to finish');
+});
+
+test('fixed timing is measured on a clock that cannot be stepped', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Fast timing',
+        maxRuntimeMs: 3000,
+        steps: [
+          {
+            action: 'groupAndPlay',
+            params: {
+              coordinator: 'Kitchen',
+              source: { type: 'keep', value: '' },
+              timing: 'fixed',
+              volumeDelayMs: 40,
+              groupDelayMs: 80,
+              modeDelayMs: 120,
+              volumes: { Study: 20 },
+            },
+          },
+        ],
+      },
+    ],
+    fast: false,
+  });
+  t.after(() => h.close());
+
+  // systemd-timesyncd steps the clock back five seconds just after boot, which
+  // is exactly when a scene is most likely to be running.
+  const realNow = Date.now;
+  let calls = 0;
+  Date.now = () => {
+    calls += 1;
+    return calls > 3 ? realNow() - 5000 : realNow();
+  };
+
+  let result;
+  try {
+    const startedAt = realNow();
+    result = await h.runner.run(h.sceneByName('Fast timing').id, { trigger: 'test' });
+    assert.ok(realNow() - startedAt < 2500, 'a clock correction must not stretch every phase by its size');
+  } finally {
+    Date.now = realNow;
+  }
+
+  assert.equal(result.ok, true);
+});
+
+test('a leader that cannot load the source leaves the house exactly as it found it', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Byradio',
+        steps: [
+          {
+            action: 'groupAndPlay',
+            params: {
+              coordinator: 'Kitchen',
+              source: { type: 'favorite', value: 'En favorit der er blevet omdøbt' },
+              membersMode: 'all',
+              volumes: { Study: 8, Kitchen: 8, 'Living Room': 8 },
+              leave: ['Garage'],
+            },
+          },
+        ],
+      },
+    ],
+  });
+  t.after(() => h.close());
+
+  const before = h.household.players.map((player) => ({
+    name: player.name,
+    volume: player.volume,
+    uri: player.currentUri,
+  }));
+
+  const result = await h.runner.run(h.sceneByName('Byradio').id, { trigger: 'test' });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(
+    h.household.players.map((player) => ({ name: player.name, volume: player.volume, uri: player.currentUri })),
+    before,
+    'failing before anything has changed beats failing halfway through',
+  );
+});
+
+test('an unusable default volume is caught before a single group is broken up', async (t) => {
+  const h = await harness({
+    scenes: [
+      {
+        name: 'Fest',
+        steps: [
+          {
+            action: 'groupAndPlay',
+            params: {
+              coordinator: 'Kitchen',
+              source: { type: 'keep', value: '' },
+              membersMode: 'all',
+              volumes: { Study: 15 },
+              // Not in the store's numeric list, so it arrives from an import
+              // exactly as it was written.
+              defaultVolume: 'høj',
+            },
+          },
+        ],
+      },
+    ],
+  });
+  t.after(() => h.close());
+
+  const before = h.household.players.map((player) => player.volume);
+  const result = await h.runner.run(h.sceneByName('Fest').id, { trigger: 'test' });
+  // Give anything already in flight time to land, so this cannot pass by being
+  // quicker than the speakers.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  assert.equal(result.ok, false);
+  const sent = h.household.players.reduce(
+    (total, player) => total + player.calls.filter((call) => call.action === 'SetVolume').length,
+    0,
+  );
+  assert.equal(sent, 0, 'not one level was sent before the bad one was noticed');
+  assert.deepEqual(h.household.players.map((player) => player.volume), before);
+});

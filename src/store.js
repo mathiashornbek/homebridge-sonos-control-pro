@@ -43,27 +43,71 @@ function safeId(value) {
   return /^[A-Za-z0-9_.:-]{1,128}$/.test(id) ? id : newId();
 }
 
+/**
+ * Nothing below is a limit anyone will meet by typing. A 200,000-character
+ * scene name is not a long name; it is a file that came from somewhere else.
+ * Without a ceiling one imported scene could make scenes.json several megabytes
+ * — and every save copies that file into `backups/`, so the cost is paid over
+ * and over on a memory card.
+ */
+const MAX_NAME_LENGTH = 64;
+const MAX_TEXT_LENGTH = 512;
+const MAX_STEPS = 200;
+const MAX_VOLUME_ENTRIES = 200;
+/** setTimeout silently fires immediately above this, which is worse than refusing. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
+function clampText(value, limit) {
+  const text = String(value ?? '');
+  return text.length > limit ? text.slice(0, limit) : text;
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+/** A saved file with its timestamp taken off, so two saves of the same state match. */
+function materialPart(buffer) {
+  try {
+    const parsed = JSON.parse(buffer.toString('utf8'));
+    if (Array.isArray(parsed)) return JSON.stringify(parsed);
+    const { updatedAt, ...rest } = parsed;
+    return JSON.stringify(rest);
+  } catch {
+    return buffer.toString('utf8');
+  }
+}
+
+/** Settings are a free-form object. Anything else arriving in that field is not one. */
+function safeSettings(raw) {
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+}
+
 /** Fill in every field a scene is allowed to have, so the rest of the code never guards. */
 function normalizeScene(raw, index = 0) {
   const scene = raw && typeof raw === 'object' ? raw : {};
   const fallbackName = t('scene.defaultName', { number: index + 1 });
   return {
     id: safeId(scene.id),
-    name: String(scene.name || fallbackName).trim() || fallbackName,
-    description: String(scene.description || ''),
+    name: clampText(String(scene.name || fallbackName).trim() || fallbackName, MAX_NAME_LENGTH),
+    description: clampText(scene.description, MAX_TEXT_LENGTH),
     enabled: scene.enabled !== false,
     order: Number.isFinite(scene.order) ? scene.order : index,
     /** 'momentary' resets itself after running; 'stateful' stays on until switched off. */
     switchType: scene.switchType === 'stateful' ? 'stateful' : 'momentary',
-    autoOffMs: Number.isFinite(scene.autoOffMs) ? Math.max(200, scene.autoOffMs) : 1000,
+    autoOffMs: clampNumber(scene.autoOffMs, 200, MAX_TIMER_MS, 1000),
     /** 'parallel': every step starts at once and waits out its own delay. */
     mode: scene.mode === 'sequential' ? 'sequential' : 'parallel',
-    maxRuntimeMs: Number.isFinite(scene.maxRuntimeMs) ? scene.maxRuntimeMs : 60000,
+    // A shared scene saying "30 days, so it never gets cut off" used to overflow
+    // the timer and abort every run of that scene instantly, blaming the speakers.
+    maxRuntimeMs: clampNumber(scene.maxRuntimeMs, 1000, MAX_TIMER_MS, 60000),
     condition: normalizeCondition(scene.condition),
     steps: normalizeSteps(scene.steps),
     elseSteps: normalizeSteps(scene.elseSteps),
     offSteps: normalizeSteps(scene.offSteps),
-    icon: String(scene.icon || 'music'),
+    icon: clampText(String(scene.icon || 'music'), MAX_NAME_LENGTH),
     hidden: scene.hidden === true,
     createdAt: scene.createdAt || new Date().toISOString(),
     updatedAt: scene.updatedAt || new Date().toISOString(),
@@ -79,7 +123,7 @@ function normalizeCondition(raw) {
 
 function normalizeSteps(raw) {
   if (!Array.isArray(raw)) return [];
-  return raw.map((step, index) => normalizeStep(step, index));
+  return raw.slice(0, MAX_STEPS).map((step, index) => normalizeStep(step, index));
 }
 
 /**
@@ -123,7 +167,7 @@ function normalizeParams(raw) {
   // rendered into two attributes each.
   if (params.volumes && typeof params.volumes === 'object') {
     const volumes = {};
-    for (const [name, value] of Object.entries(params.volumes)) {
+    for (const [name, value] of Object.entries(params.volumes).slice(0, MAX_VOLUME_ENTRIES)) {
       const level = Number(value);
       if (Number.isFinite(level)) volumes[String(name)] = Math.max(0, Math.min(100, Math.round(level)));
     }
@@ -138,15 +182,15 @@ function normalizeStep(raw, index = 0) {
     id: safeId(step.id),
     action: String(step.action || 'pause'),
     enabled: step.enabled !== false,
-    delayMs: Number.isFinite(step.delayMs) ? Math.max(0, step.delayMs) : 0,
+    delayMs: clampNumber(step.delayMs, 0, MAX_TIMER_MS, 0),
     stopOnError: step.stopOnError === true,
-    note: String(step.note || ''),
+    note: clampText(step.note, MAX_TEXT_LENGTH),
     order: Number.isFinite(step.order) ? step.order : index,
     target:
       step.target && typeof step.target === 'object'
         ? {
             type: step.target.type || 'all',
-            names: Array.isArray(step.target.names) ? step.target.names.filter(Boolean) : [],
+            names: Array.isArray(step.target.names) ? step.target.names.filter(Boolean).slice(0, MAX_STEPS) : [],
             coordinator: step.target.coordinator || '',
             filter: step.target.filter || 'any',
           }
@@ -171,6 +215,15 @@ class SceneStore extends EventEmitter {
     /** @type {Map<string, object>} */
     this.scenes = new Map();
     this.settings = {};
+    /**
+     * True when the file is there but we could not read it — a permission
+     * problem, a full descriptor table, an unmounted volume. It is not the same
+     * as a broken file, and it must not be treated as "the user has no scenes":
+     * while it is set, nothing is written and no switch is removed.
+     */
+    this.degraded = false;
+    /** The last backup failure, so it can be reported rather than swallowed. */
+    this.lastBackupError = null;
     this._watcher = null;
     this._reloadTimer = null;
     this._lastWriteAt = 0;
@@ -214,36 +267,111 @@ class SceneStore extends EventEmitter {
     }
   }
 
-  /** Load from disk. Never throws: a broken file is quarantined, not fatal. */
+  /**
+   * Load from disk. Never throws.
+   *
+   * Two failures live here and they are not the same failure, though this code
+   * used to treat them as one.
+   *
+   * A file we can read but not parse is broken: it gets quarantined and an
+   * empty list is loaded. That is recoverable, and the backups are right there.
+   *
+   * A file we cannot read *at all* is something else. One `sudo` command that
+   * leaves scenes.json owned by root, a descriptor table full on a busy box, a
+   * NAS mount that has not come back yet — the file is intact and the scenes
+   * are fine. Wiping them for that reason cost everything: every switch
+   * unregistered from Apple Home, taking its room assignment and every
+   * automation pointing at it, and then the next save wrote an empty list over
+   * a file that was never damaged. So an unreadable file now leaves the scenes
+   * exactly as they are and blocks writing until somebody has looked at it.
+   */
   load() {
-    this.ensureDirs();
-    this._migrateLegacyState();
+    try {
+      this.ensureDirs();
+      this._migrateLegacyState();
+    } catch (error) {
+      this.degraded = true;
+      this.log.error(t('log.storeUnreadable', { message: error.message }));
+      return this.list();
+    }
     if (!fs.existsSync(this.file)) {
       this.scenes = new Map();
       this.settings = {};
+      this.degraded = false;
+      return this.list();
+    }
+    let raw;
+    try {
+      raw = fs.readFileSync(this.file, 'utf8');
+    } catch (error) {
+      this.degraded = true;
+      this.log.error(t('log.storeUnreadable', { message: error.message }));
       return this.list();
     }
     try {
-      const raw = fs.readFileSync(this.file, 'utf8');
       const parsed = JSON.parse(raw);
       const scenes = Array.isArray(parsed) ? parsed : parsed.scenes || [];
-      this.settings = (!Array.isArray(parsed) && parsed.settings) || {};
+      this.settings = safeSettings(Array.isArray(parsed) ? null : parsed.settings);
       this.replaceAll(scenes);
+      this.degraded = false;
+      if (this._idsReassigned) {
+        // Write the new id back at once. Left in the file, the duplicate was
+        // resolved to a *different* random id on every single load — so Apple
+        // Home deleted and recreated that switch on every restart, and its room
+        // and its automations went with it each time.
+        this._idsReassigned = false;
+        this.save().catch((error) => this.log.warn(t('log.saveFailed', { message: error.message })));
+      }
       return this.list();
     } catch (error) {
-      const quarantine = `${this.file}.broken-${Date.now()}`;
-      try {
-        fs.copyFileSync(this.file, quarantine);
-      } catch {
-        /* best effort */
-      }
-      this.log.error(
-        t('log.brokenStore', { message: error.message, backup: path.basename(quarantine) }),
-      );
+      this._quarantine(error);
       this.scenes = new Map();
       this.settings = {};
+      this.degraded = false;
       return this.list();
     }
+  }
+
+  /**
+   * Keep a copy of a file we could not parse, so nothing is thrown away.
+   *
+   * This used to write a fresh full-size copy on every failing load — and every
+   * handler in the settings backend calls load() when the bridge is down, so
+   * clicking around a broken installation wrote copy after identical copy, none
+   * of which anything ever deleted. The name now describes the file it came
+   * from, so the same broken file is only ever kept once.
+   * @private
+   */
+  _quarantine(error) {
+    const prefix = `${path.basename(this.file)}.broken-`;
+    let suffix;
+    try {
+      const stats = fs.statSync(this.file);
+      suffix = `${Math.round(stats.mtimeMs)}-${stats.size}`;
+    } catch {
+      suffix = String(Date.now());
+    }
+    const quarantine = path.join(this.dir, `${prefix}${suffix}.json`);
+    try {
+      if (!fs.existsSync(quarantine)) fs.copyFileSync(this.file, quarantine);
+      const kept = fs
+        .readdirSync(this.dir)
+        .filter((name) => name.startsWith(prefix))
+        .sort();
+      while (kept.length > 8) {
+        const oldest = kept.shift();
+        try {
+          fs.unlinkSync(path.join(this.dir, oldest));
+        } catch {
+          /* best effort */
+        }
+      }
+    } catch {
+      /* best effort */
+    }
+    this.log.error(
+      t('log.brokenStore', { message: error.message, backup: path.basename(quarantine) }),
+    );
   }
 
   /** Scenes in display order. */
@@ -262,26 +390,44 @@ class SceneStore extends EventEmitter {
    * temp file and could rename a half-written one into place.
    */
   save(options = {}) {
+    // Take the snapshot now, not when the queued write finally runs. Between
+    // those two moments the file watcher can reload from disk and replace the
+    // whole map — and the edit that asked for this save would then be written
+    // back out as though it had never happened, while the browser was told it
+    // succeeded. Whoever asked to save meant "save what I have right now".
+    const snapshot = { settings: safeSettings(this.settings), scenes: this.list() };
     this._saveChain = this._saveChain.then(
-      () => this._save(options),
-      () => this._save(options),
+      () => this._save(options, snapshot),
+      () => this._save(options, snapshot),
     );
     return this._saveChain;
   }
 
   /** @private */
-  async _save({ backup = true } = {}) {
+  async _save({ backup = true } = {}, snapshot = null) {
+    // Refusing to write is the whole point of the degraded flag: we could not
+    // read the file, so we have no idea what would be overwritten.
+    if (this.degraded) throw new Error(t('error.storeDegraded'));
     this.ensureDirs();
     const payload = {
       schemaVersion: SCHEMA_VERSION,
       updatedAt: new Date().toISOString(),
-      settings: this.settings,
-      scenes: this.list(),
+      settings: snapshot ? snapshot.settings : safeSettings(this.settings),
+      scenes: snapshot ? snapshot.scenes : this.list(),
     };
     const serialised = `${JSON.stringify(payload, null, 2)}\n`;
 
     if (backup && fs.existsSync(this.file)) {
-      await this._writeBackup().catch(() => {});
+      try {
+        await this._writeBackup();
+        this.lastBackupError = null;
+      } catch (error) {
+        // Swallowing this meant a user could lose their backups months before
+        // finding out: saves kept succeeding and the Backups tab kept showing
+        // a list, frozen at the day the disk filled up.
+        this.lastBackupError = error.message;
+        this.log.warn(t('log.backupFailed', { message: error.message }));
+      }
     }
 
     this._saveCounter += 1;
@@ -289,20 +435,62 @@ class SceneStore extends EventEmitter {
     await fsp.writeFile(temp, serialised, 'utf8');
     await fsp.rename(temp, this.file);
     this._lastWriteAt = Date.now();
-    this.emit('saved', this.list());
+    this.emit('saved', payload.scenes);
     return payload;
   }
 
-  /** @private Keep the last 20 versions around. */
+  /** @private Backup file names, oldest first. */
+  async _backupNames() {
+    const entries = await fsp.readdir(this.backupDir).catch(() => []);
+    return entries.filter((name) => name.startsWith('scenes-') && name.endsWith('.json')).sort();
+  }
+
+  /**
+   * Keep a copy of the file we are about to replace.
+   *
+   * Two things this got wrong, and both of them emptied the feature of its
+   * point. Every save wrote a backup — including the twenty saves that an
+   * afternoon of dragging scenes around produces — so all twenty slots filled
+   * with byte-identical copies taken seconds apart, and the week-old state
+   * anyone would actually want back was gone. And the retention was a flat
+   * count, so the oldest thing you could reach was always the same afternoon.
+   * @private
+   */
   async _writeBackup() {
+    const current = await fsp.readFile(this.file);
+    const existing = await this._backupNames();
+    if (existing.length) {
+      const newest = await fsp
+        .readFile(path.join(this.backupDir, existing[existing.length - 1]))
+        .catch(() => null);
+      // Compared on the scenes and the settings, not byte for byte: every save
+      // stamps a fresh `updatedAt`, so no two files are ever identical and a
+      // byte comparison would never skip anything.
+      if (newest && materialPart(newest) === materialPart(current)) return;
+    }
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    await fsp.copyFile(this.file, path.join(this.backupDir, `scenes-${stamp}.json`));
-    const entries = (await fsp.readdir(this.backupDir))
-      .filter((name) => name.startsWith('scenes-') && name.endsWith('.json'))
-      .sort();
-    while (entries.length > 20) {
-      const oldest = entries.shift();
-      await fsp.unlink(path.join(this.backupDir, oldest)).catch(() => {});
+    await fsp.writeFile(path.join(this.backupDir, `scenes-${stamp}.json`), current);
+    await this._pruneBackups();
+  }
+
+  /**
+   * Keep the last ten, whatever they are, plus the newest one from each day
+   * that has one — so a busy afternoon cannot push out last week.
+   * @private
+   */
+  async _pruneBackups() {
+    const names = await this._backupNames();
+    const keep = new Set(names.slice(-10));
+    const newestPerDay = new Map();
+    for (const name of names) newestPerDay.set(name.slice(7, 17), name);
+    for (const name of newestPerDay.values()) keep.add(name);
+
+    const doomed = names.filter((name) => !keep.has(name));
+    const survivors = names.filter((name) => keep.has(name));
+    while (survivors.length > 40) doomed.push(survivors.shift());
+
+    for (const name of doomed) {
+      await fsp.unlink(path.join(this.backupDir, name)).catch(() => {});
     }
   }
 
@@ -332,17 +520,42 @@ class SceneStore extends EventEmitter {
     const parsed = JSON.parse(raw);
     const scenes = Array.isArray(parsed) ? parsed : parsed.scenes || [];
     this.replaceAll(scenes);
+    // The settings came out of the same file and used to be left behind, so a
+    // restore produced a state that was neither the backup nor what you had.
+    this.settings = safeSettings(Array.isArray(parsed) ? null : parsed.settings);
+    // Restoring is the deliberate act of overwriting whatever is on disk, which
+    // makes it the way out of a store we had refused to write to.
+    this.degraded = false;
     await this.save();
     return this.list();
   }
 
   // --------------------------------------------------------------- mutations
 
+  /**
+   * Where a new scene goes: after everything else.
+   *
+   * This used to be `this.scenes.size`, which is the same thing only while
+   * nothing has ever been deleted. Delete one of three scenes and add a new
+   * one, and it took an order another scene already held — landing in the
+   * middle of the list instead of at the end, and putting a duplicate somewhere
+   * other than next to its original.
+   * @private
+   */
+  _nextOrder() {
+    let highest = -1;
+    for (const scene of this.scenes.values()) {
+      if (Number.isFinite(scene.order) && scene.order > highest) highest = scene.order;
+    }
+    return highest + 1;
+  }
+
   upsert(sceneInput) {
-    const existing = sceneInput.id ? this.scenes.get(sceneInput.id) : null;
+    const input = sceneInput && typeof sceneInput === 'object' ? sceneInput : {};
+    const existing = input.id ? this.scenes.get(input.id) : null;
     const merged = normalizeScene(
-      { ...(existing || {}), ...sceneInput, updatedAt: new Date().toISOString() },
-      existing ? existing.order : this.scenes.size,
+      { ...(existing || {}), ...input, updatedAt: new Date().toISOString() },
+      existing ? existing.order : this._nextOrder(),
     );
     this.scenes.set(merged.id, merged);
     return merged;
@@ -355,15 +568,16 @@ class SceneStore extends EventEmitter {
   duplicate(id) {
     const source = this.scenes.get(id);
     if (!source) throw new Error(t('error.sceneMissing'));
+    const order = this._nextOrder();
     const copy = normalizeScene(
       {
         ...JSON.parse(JSON.stringify(source)),
         id: newId(),
         name: t('scene.copySuffix', { name: source.name }),
-        order: this.scenes.size,
+        order,
         createdAt: new Date().toISOString(),
       },
-      this.scenes.size,
+      order,
     );
     // Fresh ids for every step, otherwise the UI keys collide.
     for (const list of ['steps', 'elseSteps', 'offSteps']) {
@@ -373,22 +587,40 @@ class SceneStore extends EventEmitter {
     return copy;
   }
 
+  /**
+   * Put the given ids in the given order, and renumber everything else after
+   * them rather than trusting the caller to have sent the whole list. A partial
+   * list used to leave the scenes it omitted holding orders that now collided
+   * with the ones it had just assigned.
+   */
   reorder(orderedIds) {
-    orderedIds.forEach((id, index) => {
+    const placed = new Set();
+    let index = 0;
+    for (const id of Array.isArray(orderedIds) ? orderedIds : []) {
       const scene = this.scenes.get(id);
-      if (scene) scene.order = index;
-    });
+      if (!scene || placed.has(id)) continue;
+      placed.add(id);
+      scene.order = index;
+      index += 1;
+    }
+    for (const scene of this.list()) {
+      if (placed.has(scene.id)) continue;
+      scene.order = index;
+      index += 1;
+    }
     return this.list();
   }
 
   replaceAll(scenes) {
     this.scenes = new Map();
+    this._idsReassigned = false;
     for (const [index, scene] of (scenes || []).entries()) {
       const normalized = normalizeScene(scene, index);
       // Two scenes sharing an id would silently collapse into one, taking the
       // other's switch out of Apple Home with it.
       if (this.scenes.has(normalized.id)) {
         this.log.warn(t('log.duplicateId', { id: normalized.id, name: normalized.name }));
+        this._idsReassigned = true;
         normalized.id = newId();
         for (const list of ['steps', 'elseSteps', 'offSteps']) {
           normalized[list] = normalized[list].map((step) => ({ ...step, id: newId() }));
@@ -403,15 +635,22 @@ class SceneStore extends EventEmitter {
   merge(scenes) {
     const existingNames = new Set([...this.scenes.values()].map((scene) => scene.name.toLowerCase()));
     const added = [];
-    let order = this.scenes.size;
-    for (const scene of scenes || []) {
-      let name = scene.name;
+    let order = this._nextOrder();
+    // An import is a file, and a file can contain anything. `replaceAll` has
+    // always coped with a null entry; merge threw on it, so the same file
+    // imported in "replace" mode worked and in "add" mode returned a 500.
+    for (const raw of Array.isArray(scenes) ? scenes : []) {
+      const scene = raw && typeof raw === 'object' ? raw : {};
+      const base =
+        clampText(String(scene.name ?? '').trim(), MAX_NAME_LENGTH) ||
+        t('scene.defaultName', { number: order + 1 });
+      let name = base;
       let suffix = 2;
-      while (existingNames.has(String(name).toLowerCase())) {
-        name = `${scene.name} ${suffix}`;
+      while (existingNames.has(name.toLowerCase())) {
+        name = `${base} ${suffix}`;
         suffix += 1;
       }
-      existingNames.add(String(name).toLowerCase());
+      existingNames.add(name.toLowerCase());
       const normalized = normalizeScene({ ...scene, id: newId(), name, order: order++ }, order);
       normalized.steps = normalized.steps.map((step) => ({ ...step, id: newId() }));
       normalized.elseSteps = normalized.elseSteps.map((step) => ({ ...step, id: newId() }));

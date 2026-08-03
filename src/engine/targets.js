@@ -130,7 +130,14 @@ async function resolveTargets(system, target, { refreshTopology = false } = {}) 
       break;
 
     default:
-      players = visible;
+      // A target type we do not recognise used to fall through to "everybody",
+      // and the store accepts any non-empty string here — so a shared scene, or
+      // a hand-edit, with `{"type": "player"}` instead of `"players"` sent a
+      // volume meant for one room to all fourteen, reported success, and read
+      // as correct in the editor. At three in the morning that is the whole
+      // house waking up. An unrecognised target is a target we cannot find.
+      missing.push(descriptor.type);
+      players = [];
       break;
   }
 

@@ -646,3 +646,396 @@ test('a whitespace-only volume is refused, not treated as silence', () => {
   assert.equal(clampVolume(120), 100, 'and out of range is clamped');
   assert.equal(clampVolume(-5), 0);
 });
+
+// ─────────────────────────────────────────────── what the review turned up
+//
+// Everything below was found by reading the persistence, Homebridge and
+// accessory layers line by line. Each of these tests was confirmed to fail
+// against the code as it was before the fix beside it.
+
+test('a scenes.json that cannot be read leaves the scenes alone and refuses to write', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([{ name: 'Morgen' }, { name: 'Aften' }, { name: 'Nat' }]);
+  fs.writeFileSync(store.file, JSON.stringify({ scenes: store.list() }));
+
+  const reopened = new SceneStore({ storagePath: dir, log: quietLog });
+  reopened.load();
+  assert.equal(reopened.list().length, 3);
+
+  // The file is intact; we simply cannot open it — a root-owned file after one
+  // sudo, a full descriptor table, a mount that has not come back.
+  const realRead = fs.readFileSync;
+  fs.readFileSync = (file, ...rest) => {
+    if (String(file) === reopened.file) throw Object.assign(new Error('EMFILE'), { code: 'EMFILE' });
+    return realRead(file, ...rest);
+  };
+  try {
+    reopened.load();
+  } finally {
+    fs.readFileSync = realRead;
+  }
+
+  assert.equal(reopened.list().length, 3, 'the scenes are still there');
+  assert.equal(reopened.degraded, true);
+  assert.equal(
+    fs.readdirSync(reopened.dir).filter((name) => name.includes('.broken-')).length,
+    0,
+    'a file we could not open is not a broken file',
+  );
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a degraded store refuses to save rather than write an empty list over a good file', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([{ name: 'Morgen' }]);
+  await store.save();
+  const before = fs.readFileSync(store.file, 'utf8');
+
+  store.degraded = true;
+  await assert.rejects(() => store.save());
+  assert.equal(fs.readFileSync(store.file, 'utf8'), before, 'the file is untouched');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('the same broken file is quarantined once, however often it is loaded', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.ensureDirs();
+  fs.writeFileSync(store.file, '{ this is not json');
+
+  for (let attempt = 0; attempt < 12; attempt += 1) store.load();
+
+  const quarantined = fs.readdirSync(store.dir).filter((name) => name.includes('.broken-'));
+  assert.equal(quarantined.length, 1, 'twelve loads of one broken file, one copy of it');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('an afternoon of identical saves does not push out last week', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([{ name: 'Første' }]);
+  await store.save();
+  store.replaceAll([{ name: 'Anden' }]);
+  await store.save();
+
+  // The user drags scenes around: save after save with nothing new in them.
+  for (let index = 0; index < 30; index += 1) await store.save();
+
+  const backups = await store.listBackups();
+  assert.ok(backups.length <= 3, `no copy per save (${backups.length} kept)`);
+  const names = backups.map((entry) =>
+    JSON.parse(fs.readFileSync(path.join(store.backupDir, entry.name), 'utf8'))
+      .scenes.map((scene) => scene.name)
+      .join(','),
+  );
+  assert.ok(names.includes('Første'), 'and the state before the edit is still reachable');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a backup that cannot be written is reported, not swallowed', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const warnings = [];
+  const log = { ...quietLog, warn: (message) => warnings.push(message) };
+  const store = new SceneStore({ storagePath: dir, log });
+  store.load();
+  store.replaceAll([{ name: 'Første' }]);
+  await store.save();
+
+  store._writeBackup = async () => {
+    throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
+  };
+  store.replaceAll([{ name: 'Anden' }]);
+  await store.save();
+
+  assert.equal(warnings.length, 1, 'the user is told');
+  assert.match(store.lastBackupError, /ENOSPC/);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a save writes what was there when it was asked, not what turns up later', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([{ name: 'Morgen' }, { name: 'Aften' }]);
+  await store.save();
+
+  // A save is queued behind one already in flight...
+  const busy = store.save();
+  store.upsert({ name: 'Nat' });
+  const pending = store.save();
+  // ...and in that window something reloads the file from disk, which is what
+  // the file watcher does when the settings backend writes to it.
+  store.replaceAll([{ name: 'Morgen' }, { name: 'Aften' }]);
+  await Promise.all([busy, pending]);
+
+  const written = JSON.parse(fs.readFileSync(store.file, 'utf8'));
+  assert.ok(
+    written.scenes.some((scene) => scene.name === 'Nat'),
+    'the scene the user saved is in the file',
+  );
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('an import with a hole in it does not take the whole import down', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([{ name: 'Findes' }]);
+
+  const added = store.merge([null, { name: 'Ny' }, 'nonsens']);
+  assert.equal(store.list().length, 4);
+  assert.equal(added.length, 3);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a scene added after a delete lands last, and a duplicate next to its original', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([{ name: 'Alfa' }, { name: 'Bravo' }, { name: 'Charlie' }]);
+  store.remove(store.list()[1].id);
+  store.upsert({ name: 'Delta' });
+
+  assert.deepEqual(store.list().map((scene) => scene.name), ['Alfa', 'Charlie', 'Delta']);
+  assert.equal(new Set(store.list().map((scene) => scene.order)).size, 3, 'no two share an order');
+
+  store.duplicate(store.list()[0].id);
+  assert.equal(new Set(store.list().map((scene) => scene.order)).size, 4);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('reordering with a partial list renumbers the rest instead of colliding with it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([{ name: 'A' }, { name: 'B' }, { name: 'C' }, { name: 'D' }]);
+  const byName = (name) => store.list().find((scene) => scene.name === name).id;
+
+  store.reorder([byName('D'), byName('C')]);
+  const orders = store.list().map((scene) => scene.order);
+  assert.equal(new Set(orders).size, 4, 'every scene has its own place');
+  assert.deepEqual(store.list().slice(0, 2).map((scene) => scene.name), ['D', 'C']);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('restoring a backup brings its settings back with it', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([{ name: 'Gammel' }]);
+  store.settings = { theme: 'dark' };
+  await store.save();
+  store.replaceAll([{ name: 'Ny' }]);
+  store.settings = { theme: 'light', tilføjet: 'x' };
+  await store.save();
+
+  const backups = await store.listBackups();
+  await store.restoreBackup(backups[backups.length - 1].name);
+
+  assert.deepEqual(store.list().map((scene) => scene.name), ['Gammel']);
+  assert.deepEqual(store.settings, { theme: 'dark' }, 'not a hybrid of both');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a scene file from somewhere else cannot make scenes.json enormous', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([
+    {
+      name: 'x'.repeat(200000),
+      description: 'y'.repeat(500000),
+      steps: Array.from({ length: 10000 }, () => ({ action: 'pause' })),
+    },
+  ]);
+
+  const [scene] = store.list();
+  assert.ok(scene.name.length <= 64);
+  assert.ok(scene.description.length <= 512);
+  assert.ok(scene.steps.length <= 200);
+  assert.ok(JSON.stringify(store.list()).length < 200000, 'and the file stays a sane size');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a runtime that is too long to wait for is refused rather than fired instantly', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([{ name: 'Tredive dage', maxRuntimeMs: 2592000000 }, { name: 'Negativ', maxRuntimeMs: -1 }]);
+
+  for (const scene of store.list()) {
+    assert.ok(scene.maxRuntimeMs >= 1000 && scene.maxRuntimeMs <= 2 ** 31 - 1, scene.name);
+  }
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a duplicate id is written back once instead of changing on every restart', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.ensureDirs();
+  fs.writeFileSync(
+    store.file,
+    JSON.stringify({ scenes: [{ id: 'aften', name: 'Aften' }, { id: 'aften', name: 'Fest' }] }),
+  );
+
+  // Loading is all it takes: the new id has to reach the file by itself, or the
+  // duplicate stays there and is resolved differently on every restart.
+  store.load();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const first = store.list().map((scene) => scene.id);
+
+  const reopened = new SceneStore({ storagePath: dir, log: quietLog });
+  reopened.load();
+  assert.deepEqual(reopened.list().map((scene) => scene.id), first, 'the ids are stable now');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('switches are registered under the platform name the user actually configured', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-plat-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const api = fakeHomebridge(dir);
+  const seen = [];
+  api.registerPlatformAccessories = (plugin, platformName, accessories) => {
+    seen.push(platformName);
+    api.registered.push(...accessories);
+  };
+  // The two older names this plugin still answers to are exactly the case:
+  // Homebridge keys the live platform by whatever is in config.json.
+  const platform = new SonosControlPlatform(quietLog, { platform: 'SonosControl' }, api);
+  t.after(() => platform.stop());
+
+  platform.store.replaceAll([{ name: 'Aften' }]);
+  platform.syncAccessories();
+
+  assert.deepEqual(seen, ['SonosControl']);
+});
+
+test('an unreadable store leaves the switches in Apple Home alone', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-plat-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const api = fakeHomebridge(dir);
+  const platform = new SonosControlPlatform(quietLog, {}, api);
+  t.after(() => platform.stop());
+
+  platform.store.replaceAll([{ name: 'Aften' }, { name: 'Fest' }, { name: 'Godnat' }]);
+  platform.syncAccessories();
+  assert.equal(api.registered.length, 3);
+
+  platform.store.degraded = true;
+  platform.store.scenes = new Map();
+  platform.syncAccessories();
+
+  assert.equal(api.unregistered.length, 0, 'nothing is removed on the strength of a file we could not read');
+});
+
+test('a stateful switch remembers it was on across a restart', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-plat-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const api = fakeHomebridge(dir);
+  const platform = new SonosControlPlatform(quietLog, {}, api);
+  t.after(() => platform.stop());
+  platform.runner.run = async () => ({ ok: true, sceneName: 'x', steps: [] });
+
+  platform.store.replaceAll([{ name: 'Aftenmusik', switchType: 'stateful', offSteps: [{ action: 'pause' }] }]);
+  platform.syncAccessories();
+  const scene = platform.store.list()[0];
+  const accessory = [...platform.cachedAccessories.values()][0];
+
+  await platform.handlers.get(scene.id)._handleSet(true);
+  assert.equal(accessory.context.on, true, 'the position is written where Homebridge keeps it');
+
+  // Homebridge restarts: the accessory comes back from the cache, the handler
+  // is built again from it.
+  const { SceneSwitch } = require('../src/accessory');
+  const revived = new SceneSwitch(platform, accessory, scene);
+  assert.equal(revived.state, true, 'and the tile is not lying about the music that is still playing');
+});
+
+test('a stateful scene that fails puts its own switch back off', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-plat-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const api = fakeHomebridge(dir);
+  const platform = new SonosControlPlatform(quietLog, {}, api);
+  t.after(() => platform.stop());
+
+  // The runner reports a failed scene by resolving, not by rejecting.
+  platform.runner.run = async () => ({ ok: false, aborted: false, sceneName: 'Aftenmusik', steps: [] });
+
+  platform.store.replaceAll([{ name: 'Aftenmusik', switchType: 'stateful' }]);
+  platform.syncAccessories();
+  const handler = platform.handlers.get(platform.store.list()[0].id);
+
+  await handler._handleSet(true);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(handler.state, false, 'the tile does not sit there claiming the music is on');
+});
+
+test('a rename tells Homebridge to write its accessory cache', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-plat-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const api = fakeHomebridge(dir);
+  const updated = [];
+  api.updatePlatformAccessories = (accessories) => updated.push(...accessories);
+  const platform = new SonosControlPlatform(quietLog, {}, api);
+  t.after(() => platform.stop());
+
+  platform.store.replaceAll([{ name: 'Aften' }]);
+  platform.syncAccessories();
+  const scene = platform.store.list()[0];
+
+  platform.store.upsert({ ...scene, name: 'Aftenmusik' });
+  platform.syncAccessories();
+
+  assert.equal(updated.length, 1);
+  assert.equal(updated[0].displayName, 'Aftenmusik');
+});
+
+test('adopting a speaker with a level missing changes nothing at all', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-plat-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const api = fakeHomebridge(dir);
+  const platform = new SonosControlPlatform(quietLog, {}, api);
+  t.after(() => platform.stop());
+
+  platform.system.resolve = (name) => ({ name, uuid: `uuid:${name}` });
+  platform.store.replaceAll([
+    {
+      name: 'Musik',
+      steps: [
+        {
+          action: 'groupAndPlay',
+          params: { coordinator: 'Køkken', volumes: { Køkken: 20 } },
+        },
+      ],
+    },
+  ]);
+  const before = JSON.stringify(platform.store.list());
+
+  await assert.rejects(() => platform.adoptPlayers(['Stue', 'Bad'], { Stue: 30 }));
+  assert.equal(JSON.stringify(platform.store.list()), before, 'no half-applied change is left behind');
+});

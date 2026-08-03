@@ -31,6 +31,19 @@ class SonosControlPlatform {
     // Settled before anything else: every message from here on — including the
     // ones thrown from deep inside an action — is looked up in this language.
     this.language = setLanguage(this.config.language);
+    /**
+     * Homebridge keys a dynamic platform by the string in the user's config
+     * block, and this plugin still answers to two names it used to have. So
+     * registering accessories under the name we *prefer* rather than the one we
+     * were *loaded* as meant Homebridge could not match them back on the next
+     * restart: "Failed to find plugin to handle accessory", every switch
+     * orphaned, removed and recreated — losing its room and its automations —
+     * once per restart, forever.
+     */
+    this.platformName =
+      typeof this.config.platform === 'string' && this.config.platform
+        ? this.config.platform
+        : PLATFORM_NAME;
 
     /** @type {Map<string, object>} accessory UUID → cached PlatformAccessory */
     this.cachedAccessories = new Map();
@@ -228,6 +241,12 @@ class SonosControlPlatform {
       if (!Number.isFinite(number)) throw new Error(t('error.invalidVolumeFor', { room }));
       return Math.min(100, Math.max(0, Math.round(number)));
     };
+    // Every level is worked out before a single scene is touched. Doing it room
+    // by room inside the loop meant a request naming three rooms and giving a
+    // level for two of them wrote the first room's level into every scene, then
+    // threw — leaving a half-applied change sitting in memory, reported as an
+    // error, and quietly persisted by the next unrelated save.
+    const levels = new Map(rooms.map((room) => [room, levelFor(room)]));
 
     const touched = [];
     for (const scene of this.store.list()) {
@@ -241,7 +260,7 @@ class SonosControlPlatform {
           for (const room of rooms) {
             if (room === params.coordinator) continue;
             if ((params.leave || []).includes(room)) continue;
-            params.volumes = { ...(params.volumes || {}), [room]: levelFor(room) };
+            params.volumes = { ...(params.volumes || {}), [room]: levels.get(room) };
             if ((params.membersMode || 'all') === 'list' && !(params.members || []).includes(room)) {
               params.members = [...(params.members || []), room];
             }
@@ -274,6 +293,16 @@ class SonosControlPlatform {
 
   /** Bring the published accessories in line with the current scene list. */
   syncAccessories() {
+    // A store we could not read is not a user who has deleted all their scenes.
+    // Telling those two apart is the difference between waiting for someone to
+    // fix a file permission, and removing every switch from Apple Home — which
+    // takes each one's room assignment and every automation pointing at it, and
+    // no restore brings those back.
+    if (this.store.degraded) {
+      this.log.warn(t('log.syncSkipped'));
+      return;
+    }
+
     const scenes = this.store.list().filter((scene) => !scene.hidden);
     const wanted = new Map();
     for (const scene of scenes) {
@@ -282,42 +311,83 @@ class SonosControlPlatform {
       wanted.set(this.api.hap.uuid.generate(`${ACCESSORY_NAMESPACE}:${scene.id}`), scene);
     }
 
+    // Nothing below is written into `handlers` or `cachedAccessories` until the
+    // matching HAP call has actually succeeded. Booking it first meant that a
+    // failed registration left the plugin certain the switches were published,
+    // so it never tried again.
     const toRegister = [];
+    const pending = [];
+    const toUpdate = [];
     for (const [uuid, scene] of wanted) {
       const cached = this.cachedAccessories.get(uuid);
       if (cached) {
+        const previousName = cached.displayName;
         cached.context.scene = { id: scene.id, name: scene.name };
         const handler = this.handlers.get(scene.id);
         if (handler) handler.update(scene);
         else this.handlers.set(scene.id, new SceneSwitch(this, cached, scene));
+        // Homebridge writes its accessory cache only when it is told to. A
+        // rename made purely in memory was back to the old name after the next
+        // restart — in the log, in the Homebridge UI, and for Siri.
+        if (cached.displayName !== previousName) toUpdate.push(cached);
         continue;
       }
       const accessory = new this.api.platformAccessory(scene.name, uuid);
       accessory.context.scene = { id: scene.id, name: scene.name };
-      this.handlers.set(scene.id, new SceneSwitch(this, accessory, scene));
-      this.cachedAccessories.set(uuid, accessory);
+      // The services have to exist before the accessory is registered, so the
+      // handler is built now; it is only *adopted* if the registration works.
+      const handler = new SceneSwitch(this, accessory, scene);
       toRegister.push(accessory);
-      this.log.info(t('log.accessoryAdded', { name: scene.name }));
+      pending.push({ uuid, scene, accessory, handler });
     }
 
     const toRemove = [];
     for (const [uuid, accessory] of this.cachedAccessories) {
       if (wanted.has(uuid)) continue;
-      toRemove.push(accessory);
-      this.cachedAccessories.delete(uuid);
-      const sceneId = accessory.context?.scene?.id;
-      if (sceneId) {
-        this.handlers.get(sceneId)?.dispose();
-        this.handlers.delete(sceneId);
-      }
-      this.log.info(t('log.accessoryRemoved', { name: accessory.displayName }));
+      toRemove.push({ uuid, accessory });
     }
 
     if (toRegister.length) {
-      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, toRegister);
+      try {
+        this.api.registerPlatformAccessories(PLUGIN_NAME, this.platformName, toRegister);
+        for (const entry of pending) {
+          this.handlers.set(entry.scene.id, entry.handler);
+          this.cachedAccessories.set(entry.uuid, entry.accessory);
+          this.log.info(t('log.accessoryAdded', { name: entry.scene.name }));
+        }
+      } catch (error) {
+        for (const entry of pending) entry.handler.dispose();
+        this.log.error(t('log.accessoryAddFailed', { message: error.message || String(error) }));
+      }
     }
+
     if (toRemove.length) {
-      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, toRemove);
+      try {
+        this.api.unregisterPlatformAccessories(
+          PLUGIN_NAME,
+          this.platformName,
+          toRemove.map((entry) => entry.accessory),
+        );
+        for (const { uuid, accessory } of toRemove) {
+          this.cachedAccessories.delete(uuid);
+          const sceneId = accessory.context?.scene?.id;
+          if (sceneId) {
+            this.handlers.get(sceneId)?.dispose();
+            this.handlers.delete(sceneId);
+          }
+          this.log.info(t('log.accessoryRemoved', { name: accessory.displayName }));
+        }
+      } catch (error) {
+        this.log.error(t('log.accessoryRemoveFailed', { message: error.message || String(error) }));
+      }
+    }
+
+    if (toUpdate.length) {
+      try {
+        this.api.updatePlatformAccessories?.(toUpdate);
+      } catch (error) {
+        this.log.debug?.(t('log.accessoryAddFailed', { message: error.message || String(error) }));
+      }
     }
   }
 

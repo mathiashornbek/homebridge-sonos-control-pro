@@ -369,3 +369,123 @@ test('an unknown route answers 404 rather than hanging', async (t) => {
   const result = await h.call('GET', '/nope');
   assert.equal(result.status, 404);
 });
+
+// ─────────────────────────────────────────────── what the review turned up
+
+test('runtime.json is tightened even when it was already there and world-readable', async (t) => {
+  // The mode on writeFileSync only applies when the file is created. This is
+  // the case the old assertion could not see, because it made the file fresh
+  // every time — which is the one case that already worked.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-api-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const stateDir = path.join(dir, STATE_DIR);
+  fs.mkdirSync(stateDir, { recursive: true });
+  const runtimeFile = path.join(stateDir, RUNTIME_FILE);
+  fs.writeFileSync(runtimeFile, '{"port":1,"token":"gammel"}', { mode: 0o644 });
+  fs.chmodSync(runtimeFile, 0o644);
+
+  const control = new ControlApi({
+    platform: { version: 'test' },
+    storagePath: dir,
+    port: 0,
+    log: quietLog,
+  });
+  await control.start();
+  t.after(() => control.stop());
+
+  const mode = fs.statSync(runtimeFile).mode & 0o777;
+  assert.equal(mode & 0o077, 0, `a live token must not be readable by anyone else (mode ${mode.toString(8)})`);
+});
+
+test('a stale runtime.json is cleared before the bridge tries to bind', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-api-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const stateDir = path.join(dir, STATE_DIR);
+  fs.mkdirSync(stateDir, { recursive: true });
+  const runtimeFile = path.join(stateDir, RUNTIME_FILE);
+  fs.writeFileSync(runtimeFile, JSON.stringify({ port: 1, token: 'ET-GAMMELT-TOKEN' }));
+
+  // Something else already owns the port the user pinned, so the bind fails.
+  const squatter = http.createServer(() => {});
+  await new Promise((resolve) => squatter.listen(0, '127.0.0.1', resolve));
+  t.after(() => squatter.close());
+
+  const control = new ControlApi({
+    platform: { version: 'test' },
+    storagePath: dir,
+    port: squatter.address().port,
+    log: quietLog,
+  });
+  await assert.rejects(() => control.start());
+
+  assert.equal(
+    fs.existsSync(runtimeFile),
+    false,
+    'the settings page must not be pointed at a port we do not own, with our token',
+  );
+});
+
+test('saving without a scene list is refused rather than read as "delete everything"', async (t) => {
+  const h = await apiHarness();
+  t.after(() => h.close());
+
+  h.store.replaceAll([{ name: 'Morgen' }, { name: 'Aften' }, { name: 'Fest' }]);
+  await h.store.save();
+
+  const put = await h.call('PUT', '/scenes', { settings: { theme: 'dark' } });
+  assert.equal(put.status, 400);
+  assert.equal(h.store.list().length, 3, 'every scene is still there');
+
+  const imported = await h.call('POST', '/scenes/import', { mode: 'replace' });
+  assert.equal(imported.status, 400);
+  assert.equal(h.store.list().length, 3);
+});
+
+test('a body that is valid JSON but is not a request does not create anything', async (t) => {
+  const h = await apiHarness();
+  t.after(() => h.close());
+
+  h.store.replaceAll([{ name: 'Morgen' }]);
+
+  const number = await h.call('POST', '/scenes', 123);
+  assert.equal(h.store.list().length, 1, 'a bare number must not become an empty scene');
+  assert.equal(number.status, 400);
+
+  const nothing = await h.call('POST', '/scenes', null);
+  assert.equal(h.store.list().length, 1);
+  assert.equal(nothing.status, 400, 'and it is certainly not our internal error');
+});
+
+test('a malformed body is the client’s mistake, and says so', async (t) => {
+  const h = await apiHarness();
+  t.after(() => h.close());
+
+  const status = await new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        host: '127.0.0.1',
+        port: h.control.actualPort,
+        path: '/scenes',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-sf-token': h.control.token },
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode);
+      },
+    );
+    request.on('error', reject);
+    request.end('{');
+  });
+
+  assert.equal(status, 400, 'a 500 reads as "the bridge is broken"');
+});
+
+test('settings of the wrong shape are not persisted', async (t) => {
+  const h = await apiHarness();
+  t.after(() => h.close());
+
+  await h.call('PUT', '/scenes', { scenes: [{ name: 'Morgen' }], settings: 'boom' });
+  assert.equal(typeof h.store.settings, 'object');
+  assert.notEqual(h.store.settings, 'boom');
+});

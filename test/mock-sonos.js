@@ -214,6 +214,9 @@ class MockHousehold {
       }
 
       const result = this.execute(player, action, args);
+      if (result && typeof result === 'object' && result.fault) {
+        return send(response, 500, fault(result.fault));
+      }
       if (result === undefined) return send(response, 500, fault(401));
 
       return send(
@@ -233,7 +236,11 @@ class MockHousehold {
         player.transportState = 'PLAYING';
         return '';
       case 'Pause':
-        if (player.transportState !== 'PLAYING') return undefined; // matches a real player
+        // A real player answers 701, "transition not available", when there is
+        // nothing to pause — not a generic fault. The distinction matters:
+        // pausing an idle house is a no-op the engine is expected to swallow,
+        // and with the wrong code it looked like every speaker had refused.
+        if (player.transportState !== 'PLAYING') return { fault: 701 };
         player.transportState = 'PAUSED_PLAYBACK';
         return '';
       case 'Stop':

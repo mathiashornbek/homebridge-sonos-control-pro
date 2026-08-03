@@ -247,14 +247,22 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
         return { scenes: this.store.list(), settings: this.store.settings, offline: true };
       },
       'POST /scenes': async () => {
+        if (!body?.scene || typeof body.scene !== 'object' || Array.isArray(body.scene)) {
+          throw new RequestError(t('error.sceneMissing'), { status: 400 });
+        }
         this.store.load();
-        const scene = this.store.upsert(body?.scene || {});
+        const scene = this.store.upsert(body.scene);
         await this.store.save();
         return { scene, offline: true };
       },
       'PUT /scenes': async () => {
+        // Same guard the bridge has: a body with no scene list means the
+        // request is wrong, not that every scene should be deleted.
+        if (!Array.isArray(body?.scenes)) {
+          throw new RequestError(t('error.scenesNotAList'), { status: 400 });
+        }
         this.store.load();
-        this.store.replaceAll(body?.scenes || []);
+        this.store.replaceAll(body.scenes);
         await this.store.save();
         return { scenes: this.store.list(), offline: true };
       },
@@ -277,9 +285,12 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
         return { scenes: this.store.list(), offline: true };
       },
       'POST /scenes/import': async () => {
+        if (!Array.isArray(body?.scenes)) {
+          throw new RequestError(t('error.scenesNotAList'), { status: 400 });
+        }
         this.store.load();
-        if (body?.mode === 'replace') this.store.replaceAll(body.scenes || []);
-        else this.store.merge(body?.scenes || []);
+        if (body.mode === 'replace') this.store.replaceAll(body.scenes);
+        else this.store.merge(body.scenes);
         await this.store.save();
         return { scenes: this.store.list(), offline: true };
       },
@@ -312,8 +323,11 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
       },
       'POST /backups/restore': async () => {
         this.store.load();
-        this.store.restoreBackup(body?.name);
-        await this.store.save();
+        // Awaited. Without it a corrupt backup — which the list deliberately
+        // still offers, so the user can see it is there — rejected outside this
+        // handler and took the settings process down with it, leaving the page
+        // hanging with nothing to explain itself. restoreBackup saves for us.
+        await this.store.restoreBackup(body?.name);
         return { scenes: this.store.list(), offline: true };
       },
       // Saving the addresses is the settings page's job and works without the

@@ -8,6 +8,138 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.4.0
+
+The last three layers nobody had read. The two earlier reviews covered the
+Sonos protocol and the settings interface; this one took the persistence, the
+Homebridge integration, the control API and the 2,000-line scene engine, and
+turned up forty-five defects. Every one was reproduced against the real code
+before anything was changed, and every fix here has a test that was confirmed
+to fail without it. The suite goes from 148 to 190.
+
+### Your scenes
+
+- **A file that could not be *opened* was treated exactly like a file that
+  could not be *parsed*.** One `sudo` leaving scenes.json owned by root, a full
+  descriptor table on a busy box, a NAS mount that had not come back — any of
+  them replaced every scene with an empty list. Homebridge was then told to
+  remove every switch, which takes each one's room assignment and every
+  automation pointing at it, and the next save wrote that empty list over a
+  file that was never damaged. An unreadable file now leaves the scenes alone,
+  blocks writing, and says so.
+- **A save wrote whatever the store happened to hold when the queue reached
+  it,** not what it held when the save was asked for. If a reload landed in
+  that window the edit was silently dropped — and the settings page said
+  "Saved".
+- **Every save wrote a backup, and the retention was a flat count.** An
+  afternoon of dragging scenes around filled all twenty slots with
+  byte-identical copies taken seconds apart, and the week-old state anyone
+  would actually want back was gone. Backups are now written only when
+  something changed, and the last ten are kept alongside the newest from each
+  day.
+- **A backup that could not be written was swallowed in silence.** The Backups
+  tab kept showing a list; the protection could have stopped months earlier.
+- **A broken file was copied to a fresh quarantine file on every failing
+  load** — and every handler in the settings backend loads. Clicking around a
+  broken installation wrote copy after identical copy, and nothing ever
+  deleted them.
+- **Restoring a backup left the settings behind,** producing a state that was
+  neither the backup nor what you had.
+- **An import with a single null entry returned a 500 and imported nothing** —
+  while the same file in "replace" mode worked.
+- **A scene added after a delete took an order another scene already held,**
+  landing in the middle of the list instead of at the end; a duplicate did not
+  sit next to its original.
+- Names, descriptions and step lists are now bounded, so one imported file
+  cannot make scenes.json several megabytes — copied again on every save.
+
+### Apple Home
+
+- **Accessories were registered under the plugin's preferred platform name
+  rather than the one the user actually configured.** For anyone still on one
+  of the two older names, Homebridge could not match its cached accessories
+  back on the next restart: every switch reported orphaned, removed, and
+  recreated — losing its room and its automations — once per restart, forever.
+- **A stateful switch that was on came back off after a restart** while the
+  music was still playing, and the next press ran the "on" branch again instead
+  of turning it off. The position now survives in the accessory's context.
+- **A stateful scene that failed left its switch showing on.** The runner
+  reports a failed scene by resolving, not by rejecting, so the handler written
+  for exactly this never fired.
+- **A rename never reached Homebridge's accessory cache,** so the old name came
+  back at the next restart — in the log, in the Homebridge UI, and for Siri.
+- **Two scenes sharing an id were given a new one on every single load,** so
+  Apple Home deleted and recreated that switch on every restart. The new id is
+  written back once.
+- Accessory bookkeeping is committed only after the HAP call succeeds, and
+  adopting a speaker validates every level before it changes anything.
+
+### The scene engine
+
+- **A cancelled `restore` carried on regardless.** Forty commands over 1.2
+  seconds *after* the cancel — pulling every room out of the group the new
+  scene was building, then setting last night's volumes on top. You heard the
+  party form and fall apart, and the activity feed said it went well.
+- **A leader that could not load the source left the house ungrouped, silent
+  and turned down to listening volume.** The source is now resolved before
+  anything is touched: failing having changed nothing beats failing halfway.
+- **`restore` did not book its grouping changes,** so a scene starting within
+  the next second decided from a model that still described the old groups —
+  and skipped exactly the joins it needed.
+- **A snapshot cancelled halfway stored a full set of blanks over a good one.**
+- **Two scenes that both left the snapshot slot blank shared one drawer** and
+  restored each other's rooms. Naming a slot still shares it deliberately.
+- **The scene's condition was evaluated before discovery had finished.** Right
+  after a restart every "is nothing playing?" came back true — so the scenes
+  written specifically not to interrupt music were the ones that interrupted
+  it. And a speaker that could not be reached counted as a speaker that was
+  quiet; it now counts as unknown, and the scene takes its else-branch.
+- **A step whose speakers had all gone was recorded as a success** — the usual
+  cause being a room renamed in the Sonos app. So was a step that *every*
+  speaker refused, which also meant "stop the scene if this fails" did not.
+- **A blank wait waited no time at all and reported success.** In a doorbell
+  scene that means the restore fires while the announcement is still loading.
+- **The one-minute ceiling did not count the scene's own waits.** There is no
+  fade action, so a gentle wake-up is written as `wait 90` between two volume
+  steps — and it was cut off every time, leaving the bedroom at a whisper. The
+  budget now covers what the scene asked to wait for.
+- **An unrecognised target type meant "everybody".** `"player"` instead of
+  `"players"` in a shared scene sent a volume meant for one room to all
+  fourteen. At three in the morning that is the whole house waking up.
+- **A one-speaker action left on "all speakers" played in whichever room sorted
+  first** — and would move to a different room the day someone added a speaker
+  called Attic.
+- **Fixed timing was measured on the wall clock.** An NTP correction just after
+  boot stretched every phase by the size of the step, or collapsed all three
+  into one instant — which is precisely the shock-volume moment fixed timing
+  exists to prevent. It now uses a clock that cannot be stepped.
+- Mute and play/pause toggles no longer overlap and cancel each other out, and
+  two scenes chaining to the same third scene share one run of it rather than
+  shooting each other's.
+
+### The control API
+
+- **A missing `scenes` key meant "delete everything".** A client saving only
+  its settings, or one that misspelled the key, wiped every scene and
+  unregistered every switch — and got a 200 in reply. Both destructive routes
+  now require the list.
+- **`runtime.json` was only tightened to 0600 when it was created.** A file
+  that came back 0644 from a backup or a copy without `-p` stayed 0644 for
+  every start after that, with a live token in it. The test that was supposed
+  to cover this created the file fresh each time, which is the one case that
+  already worked.
+- **A failed start left a stale `runtime.json` behind,** so the settings page
+  would hand our token to whatever had taken that port.
+- A body that is valid JSON but is not a request no longer creates a blank
+  scene, a malformed body is a 400 rather than a 500, and a client that opens a
+  request and never finishes it is timed out instead of parked for five
+  minutes.
+
+190 tests and 114 browser checks, on Node 22, 24 and 26, serially and eight
+runs at a time.
+
+---
+
 ## 3.3.0
 
 The rest of the review. 3.2.0 fixed the six worst findings; this closes the
