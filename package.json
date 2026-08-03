@@ -35,7 +35,8 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "test:ui": "node test/ui-smoke.mjs",
-    "lint": "node --check index.js"
+    "lint": "node --check index.js",
+    "prepublishOnly": "npm test"
   },
   "files": [
     "index.js",
