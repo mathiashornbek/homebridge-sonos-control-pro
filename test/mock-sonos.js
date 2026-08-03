@@ -6,18 +6,25 @@ const { parseXml, find, text, escapeXml } = require('../src/sonos/xml');
 /**
  * A fake Sonos household for the test suite.
  *
- * Each player gets its own loopback address (127.0.0.2, 127.0.0.3, …) so the
- * real HTTP + SOAP code path is exercised end to end — no stubbing of the
- * transport, which is exactly where protocol bugs hide.
+ * Every player is a real HTTP server answering real SOAP, so the transport is
+ * exercised end to end — which is exactly where protocol bugs hide.
+ *
+ * Each one listens on 127.0.0.1 at its own port rather than on its own loopback
+ * *address*. Linux hands you the whole 127.0.0.0/8 range, so 127.0.0.2 and
+ * friends work there; macOS configures only 127.0.0.1, and binding to anything
+ * else fails with EADDRNOTAVAIL before a single test runs. Ports are available
+ * everywhere, and the players announce theirs in the LOCATION header exactly as
+ * a real device does.
  */
 
 const PORT = 14400;
 
 class MockPlayer {
-  constructor(household, { name, uuid, host }) {
+  constructor(household, { name, uuid, host, port }) {
     this.household = household;
     this.name = name;
     this.uuid = uuid;
+    this.port = port;
     this.host = host;
     this.volume = 20;
     this.muted = false;
@@ -45,7 +52,8 @@ class MockHousehold {
         new MockPlayer(this, {
           name,
           uuid: `RINCON_MOCK${String(index + 1).padStart(4, '0')}`,
-          host: `127.0.0.${index + 2}`,
+          host: '127.0.0.1',
+          port: PORT + index,
         }),
     );
     /** uuid → coordinator uuid */
@@ -69,8 +77,9 @@ class MockHousehold {
     return this.players.find((player) => player.uuid === uuid) || null;
   }
 
-  byHost(host) {
-    return this.players.find((player) => player.host === host) || null;
+  /** Which player answers on this port? The host is always 127.0.0.1. */
+  byPort(port) {
+    return this.players.find((player) => player.port === Number(port)) || null;
   }
 
   byName(name) {
@@ -95,12 +104,12 @@ class MockHousehold {
     return this;
   }
 
-  /** @private Bring one player online on its own loopback address. */
+  /** @private Bring one player online on its own port. */
   _serve(player) {
     return new Promise((resolve, reject) => {
       const server = http.createServer((request, response) => this.handle(player, request, response));
       server.on('error', reject);
-      server.listen(PORT, player.host, () => resolve());
+      server.listen(player.port, player.host, () => resolve());
       this.servers.push(server);
     });
   }
@@ -115,7 +124,8 @@ class MockHousehold {
     const player = new MockPlayer(this, {
       name,
       uuid: `RINCON_MOCK${String(index + 1).padStart(4, '0')}`,
-      host: `127.0.0.${index + 2}`,
+      host: '127.0.0.1',
+      port: PORT + index,
     });
     this.players.push(player);
     this.grouping.set(player.uuid, player.uuid);
@@ -362,7 +372,7 @@ class MockHousehold {
             members
               .map(
                 (member) =>
-                  `<ZoneGroupMember UUID="${member.uuid}" Location="http://${member.host}:${PORT}/xml/device_description.xml" ` +
+                  `<ZoneGroupMember UUID="${member.uuid}" Location="http://${member.host}:${member.port}/xml/device_description.xml" ` +
                   `ZoneName="${escapeXml(member.name)}" Invisible="0" IsZoneBridge="0"/>`,
               )
               .join('') +

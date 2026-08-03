@@ -349,3 +349,26 @@ test('renaming the package does not change accessory identity in Apple Home', ()
   assert.equal(ACCESSORY_NAMESPACE, 'homebridge-sonos-control');
   assert.notEqual(ACCESSORY_NAMESPACE, PLUGIN_NAME, 'the namespace must survive a package rename');
 });
+
+// ─────────────────────────────────────────────────────────────── portability
+
+test('the mock household binds only to 127.0.0.1', async (t) => {
+  // Linux gives you the whole 127.0.0.0/8 range; macOS configures 127.0.0.1 and
+  // nothing else, so a mock that spread itself across 127.0.0.2, 127.0.0.3 and
+  // friends failed with EADDRNOTAVAIL before a single test ran. Ports are
+  // available everywhere — this keeps it that way.
+  const { MockHousehold } = require('./mock-sonos');
+  const household = new MockHousehold(['One', 'Two', 'Three']);
+  t.after(() => household.close());
+  await household.listen();
+
+  const bound = household.servers.map((server) => server.address());
+  assert.equal(bound.length, 3);
+  for (const address of bound) assert.equal(address.address, '127.0.0.1');
+  // …and each on a port of its own, or they would answer for each other.
+  assert.equal(new Set(bound.map((address) => address.port)).size, 3);
+  assert.deepEqual(
+    household.players.map((player) => player.port).sort(),
+    bound.map((address) => address.port).sort(),
+  );
+});

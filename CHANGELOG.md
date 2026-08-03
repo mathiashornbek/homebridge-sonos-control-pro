@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.1.1
+
+### The test suite could not run on macOS
+
+Every test failed instantly with `EADDRNOTAVAIL`. The mock household gave each of its speakers a loopback address of its own — 127.0.0.2, 127.0.0.3 and so on — which Linux hands you for free and macOS does not configure at all. The suite had therefore only ever run on Linux; on a Mac it died before the first assertion.
+
+The speakers now all answer on 127.0.0.1, each on its own port, and announce that port in their `LOCATION` header exactly as a real device does. Ports are available everywhere.
+
+That meant teaching the plugin to read the port it is told rather than assuming 1400:
+
+- SSDP responses are parsed for host **and** port.
+- `ZoneGroupState` member locations are parsed for host **and** port.
+- `playerIps` accepts `192.168.1.40:1400` as well as a bare address.
+
+For a normal household this changes nothing — Sonos always answers on 1400 — but a speaker reached through a port map now works, and the test suite runs anywhere. A new test asserts the mock binds only to 127.0.0.1, so this cannot come back.
+
+124 unit tests and 95 browser checks.
+
 ## 3.1.0
 
 The release that turns a private build into a plugin anyone can install.

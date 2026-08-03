@@ -25,7 +25,9 @@ async function apiHarness() {
 
   const system = new SonosSystem({
     log: quietLog,
-    seedHosts: household.players.map((player) => player.host),
+    // Each mock player answers on its own port on 127.0.0.1, so the seed
+    // has to name the port — the same "host:port" form a real config accepts.
+    seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
     discoveryTimeout: 150,
     port: PORT,
   });

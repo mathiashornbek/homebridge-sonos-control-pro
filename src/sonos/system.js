@@ -223,7 +223,19 @@ class SonosSystem extends EventEmitter {
     }
 
     this._discovering = (async () => {
-      const hosts = new Set(this.seedHosts);
+      // Keyed by "host:port" so two entries for the same host on different
+      // ports do not collapse into one.
+      const targets = new Map();
+      const remember = (host, port) => {
+        if (!host) return;
+        targets.set(`${host}:${port || this.port || ''}`, { host, port: port || this.port });
+      };
+      for (const seed of this.seedHosts) {
+        // A seed may name a port — "192.168.1.40:1400" — which is what makes a
+        // household on anything other than the standard port testable.
+        const [host, port] = String(seed).split(':');
+        remember(host, port ? Number(port) : undefined);
+      }
       try {
         // One answer describes the whole household, so there is no reason to
         // sit out the full search window before getting on with it.
@@ -231,22 +243,22 @@ class SonosSystem extends EventEmitter {
         // describe all of it, so there is nothing to gain from sitting out the
         // rest of the search window.
         const hits = await discover({ timeout: this.discoveryTimeout, stopAfterFirst: true });
-        for (const hit of hits) hosts.add(hit.host);
+        for (const hit of hits) remember(hit.host, hit.port);
       } catch (error) {
         this.log.debug?.(`SSDP sweep failed: ${error.message}`);
       }
 
-      if (hosts.size === 0 && this.players.size > 0) {
+      if (targets.size === 0 && this.players.size > 0) {
         // Nothing answered but we already know players — keep what we have and
         // let the topology refresh decide whether they are really gone.
-        for (const player of this.players.values()) hosts.add(player.host);
+        for (const player of this.players.values()) remember(player.host, player.port);
       }
 
       // One player is enough to learn the whole household, but describing a few
       // in parallel makes us resilient to the first one being asleep.
       const described = await Promise.allSettled(
-        [...hosts].map(async (host) => {
-          const player = new SonosPlayer({ host, port: this.port });
+        [...targets.values()].map(async ({ host, port }) => {
+          const player = new SonosPlayer({ host, port });
           await player.describe(4000);
           return player;
         }),
@@ -401,15 +413,17 @@ class SonosSystem extends EventEmitter {
 
         const invisible =
           memberNode.attrs.Invisible === '1' || memberNode.attrs.IsZoneBridge === '1';
-        const locationMatch = /^https?:\/\/([^:/]+)/.exec(memberNode.attrs.Location || '');
+        const locationMatch = /^https?:\/\/([^:/]+)(?::(\d+))?/.exec(memberNode.attrs.Location || '');
         const host = locationMatch ? locationMatch[1] : '';
+        const port = locationMatch?.[2] ? Number(locationMatch[2]) : this.port;
 
         let player = this.players.get(uuid);
         if (!player) {
-          player = new SonosPlayer({ uuid, host, name: memberNode.attrs.ZoneName || '', port: this.port });
+          player = new SonosPlayer({ uuid, host, name: memberNode.attrs.ZoneName || '', port });
           this.players.set(uuid, player);
         }
         if (host) player.host = host;
+        if (port) player.port = port;
         if (memberNode.attrs.ZoneName) player.name = memberNode.attrs.ZoneName;
         player.invisible = invisible;
         player.coordinatorUuid = coordinatorUuid || uuid;

@@ -13,7 +13,7 @@
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/v/homebridge-sonos-control-pro?color=4f46e5&label=npm" alt="npm-version" /></a>
   <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/homebridge-sonos-control-pro?color=4f46e5" alt="MIT-licens" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 og 2.x" />
-  <img src="https://img.shields.io/badge/tests-123%20%2B%2094-4f46e5" alt="123 tests, 94 browserkontroller" />
+  <img src="https://img.shields.io/badge/tests-124%20%2B%2095-4f46e5" alt="124 tests, 95 browserkontroller" />
 </p>
 
 ---
@@ -213,8 +213,8 @@ Indstillingssiden viser med vilje kun to felter. Disse læses stadig fra `config
 Issues og pull requests er velkomne. Testsuiten er kontrakten:
 
 ```bash
-npm test        # 123 enheds- og integrationstests mod en komplet efterlignet Sonos-husstand
-npm run test:ui # 94 kontroller der kører den rigtige backend i Chromium
+npm test        # 124 enheds- og integrationstests mod en komplet efterlignet Sonos-husstand
+npm run test:ui # 95 kontroller der kører den rigtige backend i Chromium
 ```
 
 Efterligningen i `test/mock-sonos.js` taler rigtig SOAP over rigtig HTTP på loopback, med netværksforsinkelse, rigtige kø-opdaterings-id'er og højttalere der kan dukke op midt i en afvikling — så testene rammer den faktiske protokol, ikke en attrap.

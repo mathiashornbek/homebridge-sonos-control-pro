@@ -43,9 +43,15 @@ function localIPv4Addresses() {
 }
 
 /**
- * Pull the LOCATION header out of an SSDP response and reduce it to an IP.
+ * Pull the LOCATION header out of an SSDP response and reduce it to an address.
+ *
+ * The port is kept as well as the host. Real Sonos always answers on 1400, so
+ * this changes nothing in a normal household — but a device behind a port map,
+ * and every player in the test household, are then reachable at the address
+ * they actually announced instead of the one we assumed.
+ *
  * @param {string} message
- * @returns {{ host: string, location: string, usn: string } | null}
+ * @returns {{ host: string, port: number|null, location: string, usn: string } | null}
  */
 function parseResponse(message) {
   const headers = Object.create(null);
@@ -56,9 +62,9 @@ function parseResponse(message) {
   }
   const location = headers.location;
   if (!location) return null;
-  const match = /^https?:\/\/([^:/]+)/.exec(location);
+  const match = /^https?:\/\/([^:/]+)(?::(\d+))?/.exec(location);
   if (!match) return null;
-  return { host: match[1], location, usn: headers.usn || '' };
+  return { host: match[1], port: match[2] ? Number(match[2]) : null, location, usn: headers.usn || '' };
 }
 
 /**
