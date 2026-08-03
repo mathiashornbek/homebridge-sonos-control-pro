@@ -10,21 +10,9 @@ All notable changes to Sonos Control Pro, newest first.
 
 ## 3.4.1
 
-One thing, and it had been wrong twice.
-
-- **The tile in the settings header was not the icon.** It began as a second,
-  older drawing of the same idea — a rounder switch, the knob in a different
-  place, two sound waves where the icon has three. 3.3.0 replaced it with the
-  icon's own geometry, but only the mark: the word underneath was left behind,
-  so the tile in the settings page said nothing while the tile everywhere else
-  said SONOS. It is the whole icon now, drawn in the icon's own 512-unit
-  square, with the icon's own corner radius expressed as a proportion so it
-  stays right at any size.
-
-The test that should have caught it only ever checked the five shapes in the
-mark, which is why it passed while half the icon was missing. It now compares
-both groups — the mark's placement, its three waves, the word's placement and
-its outlines, and the count of paths in the whole thing.
+- The icon in the settings page was missing the SONOS text under the mark. It
+  is the whole icon now, and a test compares it with `docs/icon.svg` so the two
+  cannot drift apart again.
 
 ---
 
