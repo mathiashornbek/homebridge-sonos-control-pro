@@ -706,7 +706,6 @@ await page.waitForTimeout(250);
 await page.click('.sf-scene [data-act="delete"]');
 await page.waitForTimeout(250);
 check('dialogen er på engelsk', (await page.textContent('#dialog-confirm')) === 'Delete');
-await page.screenshot({ path: path.join(shots, 'ui-dialog.png') });
 await page.click('#dialog-cancel');
 await page.waitForTimeout(200);
 
@@ -768,6 +767,17 @@ async function gallery(suffix) {
   await page.waitForTimeout(250);
   await page.screenshot({ path: path.join(shots, `ui-editor-volumes${suffix}.png`), fullPage: false });
   await page.click('#editor-close');
+  await page.waitForTimeout(250);
+  // The confirm dialog, in this language too — the Danish README used to have to
+  // borrow the English one, under a Danish caption.
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.waitForTimeout(250);
+  await page.click('.sf-scene [data-act="delete"]');
+  await page.waitForTimeout(350);
+  await tidy();
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: path.join(shots, `ui-dialog${suffix}.png`) });
+  await page.click('#dialog-cancel');
   await page.waitForTimeout(250);
 }
 

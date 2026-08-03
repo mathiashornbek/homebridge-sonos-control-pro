@@ -5,8 +5,8 @@
 <h1 align="center">Sonos Control Pro</h1>
 
 <p align="center">
-  <b>Your whole house, playing, from one switch in Apple Home.</b><br />
-  Build the scene in a visual editor. Press it on your phone, your watch, or say it to Siri.
+  <b>🎵 Your whole house, playing, from one switch in Apple Home.</b><br />
+  Build the scene in a beautiful visual editor. Press it on your phone, your watch, or just ask Siri.
 </p>
 
 <p align="center">
@@ -15,62 +15,151 @@
   <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/homebridge-sonos-control-pro?color=4f46e5" alt="MIT licence" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 and 2.x" />
   <img src="https://img.shields.io/badge/tests-124%20%2B%20100-4f46e5" alt="124 unit tests, 100 browser checks" />
+  <img src="https://img.shields.io/badge/cloud-free-16a34a" alt="No cloud" />
+  <img src="https://img.shields.io/badge/🇬🇧%20%2F%20🇩🇰-bilingual-4f46e5" alt="English and Danish" />
 </p>
 
 ---
 
-You know the feeling. You want music in the whole house *except* the living room, at the levels you like, with the kitchen leading — and getting it means opening the Sonos app, grouping seven rooms by hand and setting seven volumes. Every single time.
+## 😩 You know this feeling
 
-**Sonos Control Pro turns that into one switch.**
+You want music in the whole house **except** the living room. At the levels *you* like. With the kitchen leading.
+
+So you open the Sonos app. Group seven rooms by hand. Set seven volumes. Find the playlist. Every. Single. Time. 🙄
+
+## ✨ Now it is one switch
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-scenes.png" width="720" alt="The scene list" />
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-scenes.png" width="760" alt="The scene list" />
 </p>
 
-Every scene becomes an ordinary switch in Apple Home. Press it, and the group forms, the levels land and the music starts — typically in **well under a second for a fourteen-room house**. Ask Siri. Put it on your Home screen. Trigger it from a HomeKit automation at 07:00. It is just a switch, so everything HomeKit can do to a switch, it can now do to your music.
+Every scene you build becomes an ordinary switch in Apple Home. Press it and the group forms, every level lands and the music starts — **a fourteen-room house is up and playing in about a second**. ⚡
+
+> 🗣️ *"Hey Siri, party mode."*
+> 🏠 Put it on your Home screen. ⏰ Fire it from an automation at 07:00. 🎛️ Bind it to a button.
+
+It is just a switch. So **everything HomeKit can do to a switch, it can now do to your music.**
 
 ---
 
-## Why this one
+## 🏆 Built to be the most flexible Sonos control you can put in HomeKit
 
-**It is genuinely local.** Commands go straight to the speakers over UPnP on your own network. No cloud round-trip, no account, no hub, no polling a web API. If your internet is down, your scenes still work. There are **zero runtime Sonos dependencies** — the whole protocol layer is hand-written and tested against a full mock household.
+Here is the same evening, done both ways.
 
-**Nothing is hard-coded.** Speakers are picked as clickable names read live from your system. You will never hunt for a UUID in a log file.
+| | 📱 The Sonos app, by hand | ⚡ **Sonos Control Pro** |
+| --- | :---: | :---: |
+| Group eleven rooms | eleven taps | **one** |
+| Set eleven different volumes | eleven drags | **one** |
+| Find the playlist | search it | **one** |
+| Do it again tomorrow | all over again | **one** |
+| From your watch | ❌ | ✅ |
+| From Siri | ❌ | ✅ |
+| From a HomeKit automation at 07:00 | ❌ | ✅ |
+| Skip the living room automatically | ❌ | ✅ |
+| Turn up *only* the rooms that are playing | ❌ | ✅ |
+| Include a speaker you buy next month, untouched | ❌ | ✅ |
+| Roll the whole setup back to yesterday | ❌ | ✅ |
 
-**It is fast on purpose.** Levels are set *before* a note is played, so a speaker left at 60 % last night cannot startle you. Grouping calls that are already satisfied are skipped. Commands are batched so the speakers do not spend their time gossiping about topology instead of answering.
+And under the bonnet: a visual editor with no JSON, no YAML and no UUIDs · conditions, branches, delays and timelines · ready-made templates · one-click backup and restore · English and Danish everywhere · **zero runtime Sonos dependencies**.
 
-**Volume changes are surgical.** "Turn it up" only touches speakers that are *actually playing*. Silent rooms are left alone — no more waking the bedroom because you nudged the kitchen.
-
-**New speakers look after themselves.** Set up a Sonos One this afternoon and your "everywhere except…" scenes include it automatically. The Sonos tab highlights it so you can give it a level in one click.
-
-**Danish and English.** The whole backend, every action, every line in the Homebridge log. One picker, in the header.
+**30 actions. 5 target modes. 4 live filters. Unlimited scenes.** Combine them however you like — the plugin never assumes what your house looks like.
 
 ---
 
-## What it looks like
+## 🔄 Everything is live. Nothing is hard-coded.
+
+This is the part people fall in love with. 💘
+
+There is **not one UUID, IP address or room name** for you to type. The whole editor is populated from your speakers, in real time:
+
+- 🔊 **Your speakers** appear as clickable names — read live from the household, right now
+- 🎧 **Your favourites, playlists and radio stations** come straight off the Sonos system — pick one from a list instead of hunting for a URI
+- 📊 **Real volumes, real playback state, real groups** — refreshed continuously, not guessed
+- ➕ **Buy a new speaker this afternoon** and your "everywhere except…" scenes include it *automatically*. No editing. The Sonos tab highlights it so you can give it a level in one click.
+- ✏️ **Rename a room in the Sonos app** and every affected scene is flagged in red, by name, so nothing silently stops working
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-editor.png" alt="The scene editor" /></td>
 <td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-sonos.png" alt="Live speaker view" /></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-library.png" alt="Favourites read from Sonos" /></td>
 </tr>
 <tr>
-<td><b>One step does the whole scene.</b> Pick the leader, what plays, who joins, who stays out and the level for each — with a timeline showing exactly when each phase fires.</td>
-<td><b>Your household, live.</b> Every speaker with its real volume, what it is playing and which group it is in. Drag a slider and the speaker moves.</td>
-</tr>
-<tr>
-<td><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-library.png" alt="Favourites" /></td>
-<td><img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-activity.png" alt="Activity log" /></td>
-</tr>
-<tr>
-<td><b>Your favourites, straight from Sonos.</b> Playlists, radio stations and favourites are read from your speakers — pick one from a list instead of typing a URI.</td>
-<td><b>Every run, step by step.</b> How long it took and exactly what each speaker answered. When something misbehaves, you can see why.</td>
+<td>🎚️ <b>Your household, live.</b> Every speaker with its real volume, what it is playing and which group it is in. Drag a slider here and the speaker moves in the room.</td>
+<td>💿 <b>Your library, straight from Sonos.</b> Favourites, playlists and radio stations pulled from your own system — with artwork. Click to use.</td>
 </tr>
 </table>
 
 ---
 
-## Install
+## 🎨 One step builds a whole scene
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-editor.png" width="760" alt="The scene editor" />
+</p>
+
+The action you will use most is **Start music in a group** — a single step that does everything a music scene needs:
+
+| | |
+| --- | --- |
+| 👑 **Group leader** | The speaker that drives playback. Everyone else follows it. |
+| 🎵 **What should play** | A Sonos favourite, a playlist, a radio station, a URL — or keep whatever is already on. |
+| ➕ **Who joins** | *Everyone except…* (self-maintaining) or an explicit list. |
+| ➖ **Who leaves** | The rooms that should do something else. Or nothing at all. |
+| 🔉 **Level per speaker** | On the default *Automatic* timing, set **before** a note is played — so a speaker left at 60 % last night cannot startle you. |
+| 🔀 **Shuffle / repeat / crossfade** | Leave on *Unchanged* to not touch them. |
+| ⏱️ **Timing** | *Automatic* (fastest — each phase starts the moment the last confirms) or fixed offsets you set yourself, previewed as a timeline. |
+
+### 🎚️ Type it or drag it — your choice
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-editor-volumes.png" width="700" alt="Per-speaker levels with typed percentages" />
+</p>
+
+Every speaker gets its own level, with a slider **and** a number field — because a slider is great for finding a level by ear and useless for saying "twelve". 🎯 One click on **Use current levels** captures whatever already sounds right in the house. One `×` means *leave this speaker alone*.
+
+### 🛟 And it is hard to break
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-dialog.png" width="700" alt="Delete confirmation with undo" />
+</p>
+
+Every destructive action asks first — and then **still** gives you an Undo. ↩️ Scenes are validated as you build: a music scene with no leader tells you so, at the step, before you save. Nothing is written to `config.json`, so a bad edit can never take your bridge down. 🛡️
+
+---
+
+## 🎁 Templates: a working system in about thirty seconds
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-tools.png" width="760" alt="Templates, export/import and backups" />
+</p>
+
+Don't start from an empty page. Press **Load the four starter scenes** and you instantly get four working switches — **Music everywhere**, **Pause everything**, **Turn up**, **Turn down** — already wired to *your* speakers, because the template hydrates itself from your live household. 🪄
+
+Under **Import & backup → Getting started** you choose **Load and replace everything** or **Add alongside my scenes**. They are ordinary scenes afterwards: edit them into whatever you actually want. And any scene can be **duplicated** with one click, so "same again, but the upstairs" is a ten-second job. 📋
+
+## 💾 Backups: a safety net you never have to think about
+
+- 🔁 **Automatic.** A timestamped version is saved *every single time* you change anything. The newest 20 are kept.
+- ⏮️ **One-click restore.** Pick a point in time from the list and roll the whole system back.
+- 📤 **Export everything as JSON** — download it, or copy it to the clipboard.
+- 📥 **Import** on a new bridge, or share a setup with a friend. Rooms that don't exist are named for you rather than failing silently.
+- 🧯 **Corruption-proof.** Writes are atomic; a damaged file is quarantined, never fatal.
+
+Moving house, rebuilding your bridge or just experimenting — your scenes are always one click from safe. 😌
+
+---
+
+## 📈 See exactly what happened
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/ui-activity.png" width="760" alt="The activity log" />
+</p>
+
+Every run, step by step, with **how long each one took** and **exactly what each speaker answered**. ⏱️ When something misbehaves you can see why, in seconds — instead of guessing at a log file. A step over three seconds is also called out by name in the Homebridge log.
+
+---
+
+## ⚡ Install in two minutes
 
 In the Homebridge UI, search for **Sonos Control Pro** under Plugins and press Install. Or:
 
@@ -78,7 +167,7 @@ In the Homebridge UI, search for **Sonos Control Pro** under Plugins and press I
 npm install -g homebridge-sonos-control-pro
 ```
 
-Then add the platform. The settings page has only two fields, because everything else belongs in the editor:
+Then add the platform. The settings page has exactly **two fields**, because everything else belongs in the editor: 😌
 
 ```json
 {
@@ -92,96 +181,94 @@ Then add the platform. The settings page has only two fields, because everything
 }
 ```
 
-Restart Homebridge, open **Plugins → Sonos Control Pro → Settings** and press **Load the four starter scenes**. You will have music everywhere, pause, and volume up and down working immediately — then edit them into whatever you actually want.
+Restart Homebridge → open **Plugins → Sonos Control Pro → Settings** → press **Load the four starter scenes**. Done. 🎉
 
-> **Tip:** run it as a [child bridge](https://github.com/homebridge/homebridge/wiki/Child-Bridges). Scene switches appear and disappear as you edit, and a child bridge keeps that churn away from your main bridge.
+> 💡 **Tip:** run it as a [child bridge](https://github.com/homebridge/homebridge/wiki/Child-Bridges). Scene switches appear and disappear as you edit, and a child bridge keeps that churn away from your main bridge.
 
 ---
 
-## Building a scene
+## 🧰 The full toolbox
 
-A scene is a name, a switch type and a list of actions. That is all.
-
-The one you will use most is **Start music in a group** — a single step that does everything a music scene needs:
-
-| | |
-| --- | --- |
-| **Group leader** | The speaker that drives playback. Everyone else follows it. |
-| **What should play** | A Sonos favourite, a playlist, a radio station, a URL — or keep whatever is playing. |
-| **Who is in the group** | *Everyone except…* (self-maintaining) or an explicit list. |
-| **Speakers that leave** | The rooms that should do something else. Or nothing. |
-| **Level per speaker** | Set before a note is played. Sliders, or "use current levels" to capture what already sounds right. |
-| **Shuffle / repeat / crossfade** | Leave on *Unchanged* to not touch them. |
-
-Everything is validated as you build it: a music scene with no leader says so, at the step, before you save.
-
-### The rest of the actions
+### 🎬 Actions
 
 | Category | Actions |
 | --- | --- |
-| **Playback** | Play favourite · Play playlist · Play radio · Play URL/stream · Play · Pause · Stop · Toggle · Next · Previous · Line-in · TV audio |
-| **Volume** | Set volume · Turn up/down · Set group volume · Turn group up/down · Mute · Toggle mute |
-| **Grouping** | Join group · Leave group |
-| **Settings** | Shuffle · Repeat · Crossfade · Loudness · Bass and treble |
-| **Sequence** | Wait · Remember state · Restore state · Run another scene |
+| 🎵 **Music scene** | Start music in a group *(the big one — leader, source, joins, leaves, levels, play modes, timing)* |
+| ▶️ **Playback** | Play Sonos favourite · Play Sonos playlist · Play radio station · Play URL / stream · Play · Pause · Stop · Play / pause (toggle) · Next track · Previous track · Switch to line-in · Switch to TV audio |
+| 🔊 **Volume** | Set volume · Turn up / down · Set group volume · Turn the group up / down · Mute / unmute · Toggle mute |
+| 🔗 **Grouping** | Join group · Leave group |
+| ⚙️ **Sound settings** | Shuffle · Repeat · Crossfade · Loudness · Bass and treble |
+| 🧩 **Sequence** | Wait · Remember the current state · Restore a saved state · Run another scene |
 
-### Which speakers
-
-Every action takes a target, and the target is where the sharpness lives:
+### 🎯 Targets — where the real sharpness lives
 
 | Target | Means |
 | --- | --- |
-| All speakers | Everything the household has, right now |
-| Chosen speakers | Exactly the rooms you pick |
-| All except | Everything minus the rooms you pick — new speakers included automatically |
-| The group around | Whoever is currently grouped with a given room |
-| The leader of | The one speaker that owns that group's transport |
+| 🌍 **All speakers** | Everything the household has, *right now* |
+| ✅ **Chosen speakers** | Exactly the rooms you pick |
+| 🚫 **All except** | Everything minus the rooms you pick — **new speakers included automatically** |
+| 🔗 **The group around** | Whoever is currently grouped with a given room |
+| 👑 **The leader of** | The one speaker that owns that group's transport |
 
-…and then a filter: **whatever they are doing** · **only those playing right now** · **only the silent ones** · **only group leaders**.
+…then a live filter: **whatever they are doing** · **only those playing right now** · **only the silent ones** · **only group leaders**.
 
-That second one is what makes a volume scene safe. "+5 %, only those playing" is the entire trick.
+That second one is the whole trick behind a safe volume scene. 🤫 **"+5 %, only those playing"** turns up the kitchen without ever waking the bedroom.
 
-### Switch types
+### 🎚️ Switch types
 
-- **Press** — runs and turns itself back off, like a button. Use it for "start the music", "pause everything", "turn it up".
-- **On/off** — stays on until you switch it off, and switching it off runs a second list of actions. Use it for "evening music" that pauses the house when you turn it off.
+- **Press** ▶️ — runs and turns itself back off, like a button. *"Start the music", "pause everything", "turn it up".*
+- **On/off** 🔛 — stays on until you switch it off, and switching it off runs a **second list of actions**. *"Evening music" that pauses the house when you turn it off.*
 
-Optionally a scene can have a **condition** — is anything playing? is it between 22:00 and 06:00? is the kitchen above 30 %? — with a second branch for when it is not met.
+Any scene can also carry a **condition** 🤔 — *is anything playing? is it between 22:00 and 06:00? is the kitchen above 30 %?* — with a whole second branch for when it isn't met.
 
 ---
 
-## Under the bonnet
+## 🔒 Genuinely local. Genuinely private.
+
+- 🏠 Commands go **straight to your speakers** over UPnP on your own network
+- ☁️ **No cloud round-trip. No account. No hub. No web API polling.**
+- 📴 **Internet down? Your scenes still work.**
+- 📡 **Zero telemetry, zero analytics** — no outbound connection of any kind other than to your own speakers
+- 📦 **Zero runtime Sonos dependencies** — the entire protocol layer is hand-written and tested against a full mock household
+
+---
+
+## 🇬🇧 🇩🇰 Bilingual, all the way down
+
+The whole backend, every action, every help text, every line in the Homebridge log — in **English and Danish**. One picker, in the header, switching live. 🌍
+
+---
 
 <details>
-<summary><b>How it talks to Sonos</b></summary>
+<summary><b>🔧 Under the bonnet — how it talks to Sonos</b></summary>
 
 Straight UPnP/SOAP over HTTP to port 1400 on each speaker: `AVTransport`, `RenderingControl`, `GroupRenderingControl`, `ContentDirectory`, `ZoneGroupTopology`, `DeviceProperties`. Discovery is SSDP with an early exit — one answer describes the whole household — plus a manual IP list for networks that block multicast.
 
-Connections are pooled and kept alive. Timeouts are 2.5 s with a single short retry, and only for calls that are safe to send twice: reads and absolute sets. A relative volume change or an "add to queue" is never retried, because doing it twice would be wrong.
+Connections are pooled and kept alive. Timeouts default to 2.5 s — longer for the handful of calls that are genuinely slow, like browsing the library — with a single short retry, and only for calls that are safe to send twice: reads and absolute sets. A relative volume change or an "add to queue" is never retried, because doing it twice would be wrong.
 
 The topology is cached and refreshed on a schedule, with grouping changes booked immediately rather than re-read — both faster and more correct, since a read moments after a change is answered from the cache anyway.
 </details>
 
 <details>
-<summary><b>How a scene runs</b></summary>
+<summary><b>⏱️ Under the bonnet — how a scene runs</b></summary>
 
 Every step starts at once and waits out its own delay, measured from the start of the scene. A step with a 2 s delay fires 2 s after the press — not 2 s after the previous step finished. A scene can opt into strict sequential execution instead.
 
-Inside a music scene the phases are ordered so nothing surprises you: levels first, then anything that makes a sound, then grouping, then play modes. On *automatic* timing each phase starts the moment the last one confirms; on *fixed* timing each phase starts at its own offset from the scene's start.
+Inside a music scene the phases are ordered so nothing surprises you: **levels first**, then anything that makes a sound, then grouping, then play modes. On *automatic* timing each phase starts the moment the last one confirms; on *fixed* timing each phase starts at its own offset from the scene's start.
+
+Grouping calls that are already satisfied are skipped. Commands are batched so the speakers do not spend their time gossiping about topology instead of answering.
 
 Pressing the same scene again while it is running counts as one press, not two — but only for scenes that decide what plays. Two taps on "turn it up" genuinely means twice. Pressing a *different* music scene cancels the first, all the way down to the commands aimed at its group leader.
 </details>
 
 <details>
-<summary><b>Where your data lives</b></summary>
+<summary><b>📁 Under the bonnet — where your data lives</b></summary>
 
 Scenes live in `sonos-control-pro/scenes.json` next to your Homebridge config — never in `config.json`, so a bad edit can never take the bridge down. Writes are atomic and every save leaves a timestamped backup behind; the newest 20 are kept and can be restored from the settings. A corrupt file is quarantined rather than fatal.
-
-Nothing leaves your network. No telemetry, no analytics, and no outbound connection of any kind other than to your own speakers.
 </details>
 
 <details>
-<summary><b>Hidden settings</b></summary>
+<summary><b>🎛️ Hidden settings</b></summary>
 
 The settings page shows two fields on purpose. These are still read from `config.json` if you put them there, and all have sensible defaults:
 
@@ -197,35 +284,38 @@ The settings page shows two fields on purpose. These are still read from `config
 
 ---
 
-## Troubleshooting
+## 🩺 Troubleshooting
 
-**No speakers found.** Some networks block multicast between VLANs, or have AP isolation on. Put one speaker's IP address in `config.json` under `playerIps` — the rest are discovered through it.
+**🔍 No speakers found.** Some networks block multicast between VLANs, or have AP isolation on. Put one speaker's IP address in `config.json` under `playerIps` — the rest are discovered through it.
 
-**A scene names a room that no longer exists.** Renaming a room in the Sonos app renames it everywhere. The scene list marks affected scenes in red and names the missing room; open the scene and pick the new name.
+**🏷️ A scene names a room that no longer exists.** Renaming a room in the Sonos app renames it everywhere. The scene list marks affected scenes in red and names the missing room; open the scene and pick the new name.
 
-**A step says "none of the speakers were playing".** That is the *only those playing* filter doing its job. It is not an error.
+**🤫 A step says "none of the speakers were playing".** That is the *only those playing* filter doing its job. It is not an error.
 
-**Something took longer than expected.** Open the **Activity** tab. Every step is there with its duration and the speaker's own answer. A step over three seconds is also called out by name in the Homebridge log.
+**🐌 Something took longer than expected.** Open the **Activity** tab. Every step is there with its duration and the speaker's own answer.
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
-Issues and pull requests are welcome. The test suite is the contract:
+Issues and pull requests are very welcome. The test suite is the contract:
 
 ```bash
 npm test        # 124 unit and integration tests against a full mock Sonos household
 npm run test:ui # 100 checks driving the real settings UI in Chromium
 ```
 
-The mock household in `test/mock-sonos.js` speaks real SOAP over real HTTP on loopback, with configurable latency, real queue update IDs and speakers that can appear mid-run — so the tests exercise the actual protocol, not a stub of it.
+The mock household in `test/mock-sonos.js` speaks real SOAP over real HTTP on loopback, with configurable latency, real queue update IDs and speakers that can appear mid-run — so the tests exercise the actual protocol, not a stub of it. 🧪
 
 ---
 
-## Licence
+## 📄 Licence
 
 MIT © Mathias Hornbek
 
 Not affiliated with, endorsed by or sponsored by Sonos, Inc. "Sonos" is a trademark of Sonos, Inc., used here only to describe what this plugin controls.
 
-**[Dansk dokumentation →](README.da.md)**
+<p align="center">
+  <b>⭐ If this made your house better, a star on GitHub means a lot.</b><br />
+  <b><a href="README.da.md">🇩🇰 Dansk dokumentation →</a></b>
+</p>

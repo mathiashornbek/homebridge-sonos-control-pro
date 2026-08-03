@@ -1,5 +1,27 @@
 # Changelog
 
+## 3.1.4
+
+### A README that actually sells the thing
+
+The old one explained the plugin well and undersold it badly. It buried the three things that make this plugin different — that nothing is hard-coded, that templates give you a working system in half a minute, and that every change is backed up automatically — under a wall of prose about UPnP.
+
+The rewrite leads with the feeling everybody recognises (grouping seven rooms by hand, every single time), answers it in one line, and then earns the claim: a side-by-side table against what a typical Sonos plugin offers, a section on how everything in the editor is read live from the household rather than typed in, and proper space for templates and backups. Eight screenshots instead of five — the level editor with its typed percentages, the Import & backup tab, and the confirm-with-undo dialog are all shown now. Danish mirrors it line for line.
+
+Every count and button name in it was then checked against the code rather than remembered — 30 actions, 5 target modes, 4 filters, and the labels in the tables are the labels the UI actually renders, in both languages — which turned up three claims that had quietly drifted:
+
+- **"Levels are set before a note is played" is only true on automatic timing.** Choose fixed timing and the source starts at t=0 while the levels land at their own offset, which is the whole point of fixed timing. Both READMEs now say which mode they mean.
+- **"Timeouts are 2.5 s"** ignored `Browse`, `GetZoneGroupState`, `SetAVTransportURI` and `AddURIToQueue`, which are deliberately given longer. Now stated as a default with an exception.
+- **"A fixed timeline you draw yourself"** oversold three number fields. The timeline is a preview; the offsets are typed.
+
+The comparison up top is now against doing the same evening by hand in the Sonos app — something anyone can check for themselves — rather than against an unnamed "typical plugin", which was a claim this repository could not back up.
+
+### The Danish README had an English screenshot
+
+The confirm-and-undo dialog was only ever captured in English, so the Danish page showed English chrome under a Danish caption — in the one document whose argument is that the plugin is bilingual all the way down. The gallery step of the UI smoke test now captures the dialog in whichever language it is running, so both get their own.
+
+No functional change. 124 unit tests and 100 browser checks.
+
 ## 3.1.3
 
 ### The test suite could not run on a machine with cores to spare
