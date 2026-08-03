@@ -80,12 +80,21 @@ class SonosSystem extends EventEmitter {
     topologyIntervalMs = 30000,
     libraryTtlMs = 300000,
     port,
+    discoverFn = discover,
   } = {}) {
     super();
     this.log = log;
     this.seedHosts = seedHosts.filter(Boolean);
     /** Overridable only so the test suite can run fake players on loopback. */
     this.port = port;
+    /**
+     * The SSDP sweep, overridable for the same reason — and for a sharper one:
+     * a test that calls the real one broadcasts on whatever network the machine
+     * is plugged into. Run the suite in a house that owns Sonos speakers and
+     * they answer, join the fixture, and are then a candidate for whatever the
+     * test was about to do. The suite hands in a sweep that finds nothing.
+     */
+    this.discoverFn = discoverFn;
     this.discoveryTimeout = discoveryTimeout;
     this.topologyIntervalMs = topologyIntervalMs;
     this.libraryTtlMs = libraryTtlMs;
@@ -242,7 +251,10 @@ class SonosSystem extends EventEmitter {
         // A Sonos household is one household: whoever answers first can
         // describe all of it, so there is nothing to gain from sitting out the
         // rest of the search window.
-        const hits = await discover({ timeout: this.discoveryTimeout, stopAfterFirst: true });
+        const hits = await this.discoverFn({
+          timeout: this.discoveryTimeout,
+          stopAfterFirst: true,
+        });
         for (const hit of hits) remember(hit.host, hit.port);
       } catch (error) {
         this.log.debug?.(`SSDP sweep failed: ${error.message}`);

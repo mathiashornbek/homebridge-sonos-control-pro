@@ -13,6 +13,43 @@ the part nobody can reconstruct.
 
 ---
 
+## 3.1.7
+
+### The test suite talked to the real speakers
+
+`npm test` broadcast SSDP on whatever network the machine was plugged into.
+In a container with no Sonos in it, nothing answered and nobody noticed. Run on
+a Mac in a house with fourteen Sonos speakers and all fourteen answered the
+sweep, joined the fixture — and were then candidates for whatever the test was
+about to do next.
+
+Two of 3.1.6's new tests failed loudly because of it, which is the good outcome.
+The bad one was always available: a test suite that can reach a stranger's
+speakers can also send them commands.
+
+The SSDP sweep is now injectable, the way the player port already was, and every
+`SonosSystem` the suite builds hands in one that finds nothing. A further test
+reads the test files themselves and fails if any construction forgets — the
+default is still the live sweep, because that is what the plugin must do, and
+forgetting must therefore be caught rather than trusted.
+
+### A test that assumed everyone's machine is English
+
+`resolveLanguage(undefined, {})` with an empty environment falls through to
+`Intl`, so the answer is whatever the machine's locale says. The test demanded
+`'en'` and failed on a Mac set to Danish — where `'da'` is the correct answer
+and the whole point of 3.1.6's change.
+
+It now asserts that no setting behaves *exactly like* `auto`, rather than
+asserting what `auto` resolves to on the machine that happens to be running it.
+The fixed answers are checked with an explicit environment, where `Intl` never
+gets a say.
+
+127 unit tests and 100 browser checks, on Node 22 and Node 24, and now on a
+network with real Sonos speakers on it too.
+
+---
+
 ## 3.1.6
 
 Everything here came out of auditing the plugin line by line against the

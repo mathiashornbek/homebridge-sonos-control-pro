@@ -14,7 +14,7 @@
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?color=4f46e5" alt="downloads" /></a>
   <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/badge/licence-MIT-4f46e5" alt="MIT licence" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 and 2.x" />
-  <img src="https://img.shields.io/badge/tests-126%20%2B%20100-4f46e5" alt="126 unit tests, 100 browser checks" />
+  <img src="https://img.shields.io/badge/tests-127%20%2B%20100-4f46e5" alt="127 unit tests, 100 browser checks" />
 </p>
 
 ---
@@ -301,7 +301,7 @@ The settings page shows two fields on purpose. These are still read from `config
 Issues and pull requests are very welcome. The test suite is the contract:
 
 ```bash
-npm test        # 126 unit and integration tests against a full mock Sonos household
+npm test        # 127 unit and integration tests against a full mock Sonos household
 npm run test:ui # 100 checks driving the real settings UI in Chromium
 ```
 

@@ -97,13 +97,22 @@ test('resolveLanguage takes an explicit code, then the environment, then English
   assert.equal(resolveLanguage('en', {}), 'en');
   assert.equal(resolveLanguage('auto', { LANG: 'da_DK.UTF-8' }), 'da');
   assert.equal(resolveLanguage('auto', { LC_ALL: 'da_DK.UTF-8', LANG: 'en_GB' }), 'da');
-  assert.equal(resolveLanguage(undefined, {}), 'en', 'no setting behaves like auto');
-  assert.equal(resolveLanguage('', {}), 'en');
+  // With an empty env, the answer comes from Intl — so it depends on the
+  // machine. Assert the equivalence rather than the answer: this test used to
+  // demand 'en' and failed on the author's own Mac, which is set to Danish.
+  assert.equal(
+    resolveLanguage(undefined, {}),
+    resolveLanguage('auto', {}),
+    'no setting behaves exactly like auto',
+  );
+  assert.equal(resolveLanguage('', {}), resolveLanguage('auto', {}));
+  // With an env, it is decided before Intl is consulted, so these are fixed.
   assert.equal(
     resolveLanguage(undefined, { LANG: 'da_DK.UTF-8' }),
     'da',
     'no setting still follows a Danish machine',
   );
+  assert.equal(resolveLanguage(undefined, { LANG: 'en_GB.UTF-8' }), 'en', 'and an English one');
   assert.equal(resolveLanguage('sv', {}), 'en', 'an unknown code falls back rather than crashing');
   // A locale we do not speak falls through to whatever the machine reports;
   // both answers are legitimate, a crash or a raw key is not.

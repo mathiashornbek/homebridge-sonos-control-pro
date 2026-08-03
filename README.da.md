@@ -14,7 +14,7 @@
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?color=4f46e5" alt="downloads" /></a>
   <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/badge/licens-MIT-4f46e5" alt="MIT-licens" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 og 2.x" />
-  <img src="https://img.shields.io/badge/tests-126%20%2B%20100-4f46e5" alt="126 tests, 100 browserkontroller" />
+  <img src="https://img.shields.io/badge/tests-127%20%2B%20100-4f46e5" alt="127 tests, 100 browserkontroller" />
 </p>
 
 ---
@@ -301,7 +301,7 @@ Indstillingssiden viser to felter med vilje. Disse læses stadig fra `config.jso
 Issues og pull requests er meget velkomne. Testsuiten er kontrakten:
 
 ```bash
-npm test        # 126 tests mod en komplet efterligning af en Sonos-husstand
+npm test        # 127 tests mod en komplet efterligning af en Sonos-husstand
 npm run test:ui # 100 kontroller der styrer den rigtige brugerflade i Chromium
 ```
 

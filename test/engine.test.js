@@ -34,6 +34,10 @@ async function harness({ scenes = fixture.SCENES, fast = true } = {}) {
     // has to name the port — the same "host:port" form a real config accepts.
     seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
     discoveryTimeout: 200,
+    // Never broadcast on the machine's real network. Run this suite in a house
+    // that owns Sonos speakers and they answer the sweep, join the fixture,
+    // and become candidates for whatever the test is about to do.
+    discoverFn: async () => [],
   });
   await system.discover({ force: true });
 

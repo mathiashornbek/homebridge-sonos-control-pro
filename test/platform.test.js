@@ -388,6 +388,11 @@ test('a household with nothing in it says so, rather than throwing', async () =>
   // somebody whose network blocks multicast. It used to be a ReferenceError:
   // the empty-handed branch tested a variable that had never existed, and no
   // test covered it because every other test has a mock household answering.
+  //
+  // The sweep is stubbed, and that is not a convenience. The first version of
+  // this test called the real one, and on the author's own Mac fourteen real
+  // Sonos speakers answered it and failed the assertion. A test suite has no
+  // business broadcasting on the network it happens to be run from.
   const { SonosSystem } = require('../src/sonos/system');
   const warnings = [];
   const log = { ...quietLog, warn: (message) => warnings.push(String(message)) };
@@ -397,6 +402,7 @@ test('a household with nothing in it says so, rather than throwing', async () =>
     // A port nothing is listening on, so describe() fails the honest way.
     seedHosts: ['127.0.0.1:1'],
     discoveryTimeout: 150,
+    discoverFn: async () => [],
   });
 
   const players = await system.discover({ force: true });
@@ -415,7 +421,39 @@ test('a household with no seeds at all is the same, quiet, story', async () => {
   const warnings = [];
   const log = { ...quietLog, warn: (message) => warnings.push(String(message)) };
 
-  const system = new SonosSystem({ log, seedHosts: [], discoveryTimeout: 150 });
+  const system = new SonosSystem({
+    log,
+    seedHosts: [],
+    discoveryTimeout: 150,
+    discoverFn: async () => [],
+  });
   assert.deepEqual(await system.discover({ force: true }), []);
   assert.equal(warnings.length, 1);
+});
+
+test('the suite never broadcasts on the machine it is running on', async () => {
+  // The guard for the guard. Every SonosSystem a test builds hands in its own
+  // sweep; if one ever forgets, the default is the real SSDP one and the suite
+  // starts talking to whatever Sonos hardware is on the network.
+  const { SonosSystem } = require('../src/sonos/system');
+  const { discover } = require('../src/sonos/ssdp');
+  const fs = require('node:fs/promises');
+  const path = require('node:path');
+
+  // The default really is the live sweep — that is what makes forgetting bad.
+  assert.equal(new SonosSystem({ log: quietLog }).discoverFn, discover);
+
+  const dir = __dirname;
+  const files = (await fs.readdir(dir)).filter((name) => name.endsWith('.test.js'));
+  const offenders = [];
+  for (const name of files) {
+    const source = await fs.readFile(path.join(dir, name), 'utf8');
+    // Every construction, and what follows it up to the closing brace.
+    for (const match of source.matchAll(/new SonosSystem\(\{[\s\S]*?\n\s*\}\)/g)) {
+      if (!match[0].includes('discoverFn')) {
+        offenders.push(`${name}: ${match[0].split('\n')[0]}…`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], `a SonosSystem without a stubbed sweep:\n${offenders.join('\n')}`);
 });

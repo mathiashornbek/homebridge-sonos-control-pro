@@ -29,6 +29,8 @@ async function apiHarness() {
     // has to name the port — the same "host:port" form a real config accepts.
     seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
     discoveryTimeout: 150,
+    // The mock household only, never the machine's real network. See engine.test.js.
+    discoverFn: async () => [],
   });
   await system.discover({ force: true });
 
