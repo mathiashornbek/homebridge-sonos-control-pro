@@ -88,6 +88,17 @@ async function apiHarness() {
       await store.save();
       return { rooms, scenes: touched, scenesList: store.list() };
     },
+    config: {},
+    async setPlayerIps(value) {
+      const hosts = String(value || '')
+        .split(/[\s,;]+/)
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      platform.config.playerIps = hosts.join(', ');
+      system.seedHosts = hosts;
+      await system.discover({ force: true });
+      return { hosts, found: system.list().length };
+    },
     listPresets: () => require('../src/presets').listPresets(),
     applyPreset: async (id, options) => {
       const found = require('../src/presets').getPreset(id);
@@ -312,6 +323,44 @@ test('adopting a new speaker gives it a level in every music scene', async (t) =
 
   const after = await h.call('GET', '/status');
   assert.equal(after.body.unconfigured.includes('Terrasse'), false);
+});
+
+test('manual addresses can be set from the settings page and take effect at once', async (t) => {
+  // The setting somebody on a segmented network actually needs, and the one
+  // they could not reach: a custom UI replaces Homebridge's form, so playerIps
+  // used to mean hand-editing config.json — a poor answer for exactly the
+  // people whose speakers are not being found.
+  const h = await apiHarness();
+  t.after(() => h.close());
+
+  const before = await h.call('GET', '/playerIps');
+  assert.equal(before.status, 200);
+  assert.equal(before.body.playerIps, '');
+
+  const addresses = h.household.players
+    .slice(0, 2)
+    .map((player) => `${player.host}:${player.port}`)
+    .join(', ');
+
+  const saved = await h.call('POST', '/playerIps', { playerIps: addresses });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.hosts.length, 2);
+  assert.ok(saved.body.found > 0, 'the addresses were tried immediately, not at the next restart');
+  assert.ok(Array.isArray(saved.body.players) && saved.body.players.length > 0);
+
+  // …and it is readable again, so the field is filled in on the next visit.
+  const after = await h.call('GET', '/playerIps');
+  assert.equal(after.body.playerIps, addresses);
+});
+
+test('clearing the manual addresses is allowed, and empties them', async (t) => {
+  const h = await apiHarness();
+  t.after(() => h.close());
+  await h.call('POST', '/playerIps', { playerIps: '10.0.0.9' });
+  const cleared = await h.call('POST', '/playerIps', { playerIps: '' });
+  assert.equal(cleared.status, 200);
+  assert.deepEqual(cleared.body.hosts, []);
+  assert.equal((await h.call('GET', '/playerIps')).body.playerIps, '');
 });
 
 test('an unknown route answers 404 rather than hanging', async (t) => {

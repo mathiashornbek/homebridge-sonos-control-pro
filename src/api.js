@@ -207,6 +207,21 @@ class ControlApi {
       return;
     }
 
+    // ------------------------------------------------------- manual addresses
+    if (route === 'POST /playerIps') {
+      const result = await platform.setPlayerIps(body.playerIps);
+      this._send(response, 200, {
+        ...result,
+        players: await system.snapshot({ withState: false }),
+      });
+      return;
+    }
+
+    if (route === 'GET /playerIps') {
+      this._send(response, 200, { playerIps: platform.config?.playerIps || '' });
+      return;
+    }
+
     if (route === 'POST /discover') {
       await system.discover({ force: true });
       await system.getLibrary({ force: true }).catch(() => {});

@@ -8,6 +8,23 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.1.8
+
+### Added
+
+- **Manual speaker addresses, from the settings page.** If your network blocks multicast between VLANs, the speakers never answer the ordinary search — and the fix, `playerIps`, could only be set by hand-editing `config.json`, because a custom settings UI replaces Homebridge's own form. There is now a field for it on the Sonos tab. It opens by itself when nothing is found, applies immediately rather than at the next restart, and says so when the addresses still do not answer. One address is enough; the rest of the household is discovered through it.
+
+### Fixed
+
+- **`config.schema.json` was not valid JSON Schema.** The `name` property carried `"required": true`, which is not a thing — `required` is an array at the object level naming the properties that are required. Homebridge rendered the form either way, so nothing looked wrong.
+- **`keywords` did not declare a transport.** Added `supports-hap`: this plugin exposes switches through HAP and does nothing over Matter.
+
+Both are now asserted by tests, since neither is visible by looking at the settings page.
+
+131 unit tests and 106 browser checks.
+
+---
+
 ## 3.1.7
 
 ### Fixed

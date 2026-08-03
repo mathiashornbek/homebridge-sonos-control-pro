@@ -38,6 +38,7 @@ const { SceneStore } = require('../src/store');
 const ROOMS = [...fixture.ROOMS];
 
 let bridgeLanguage = null;
+let manualIps = '';
 const failures = [];
 const check = (name, condition, detail = '') => {
   if (condition) console.log(`ok   ${name}`);
@@ -260,6 +261,17 @@ await page.exposeFunction('__call', (payload) => {
       return { language: body.language };
     case 'GET /backups':
       return { backups: [] };
+    case 'POST /playerIps': {
+      const hosts = String(body.playerIps || '')
+        .split(/[\s,;]+/)
+        .filter(Boolean);
+      manualIps = hosts.join(', ');
+      // Two addresses find the household; anything else finds nothing, which is
+      // the case worth having a message for.
+      return { hosts, found: hosts.length >= 2 ? ROOMS.length : 0, players: [] };
+    }
+    case 'GET /playerIps':
+      return { playerIps: manualIps };
     default:
       return {};
   }
@@ -406,6 +418,36 @@ check('grupperede højttalere vises som spillende', (await page.$$('.sf-pill--go
 check('ordet "Stille" er væk', sonosText.includes('Stille') === false);
 check('"Spiller ikke" bruges når der ikke spilles', true);
 check('nu-spiller vises på kortene', sonosText.includes('City Radio · DR LYD'));
+
+// Manuelle adresser — den ene indstilling en bruger på et segmenteret netværk
+// har brug for, og den eneste der før krævede at rette i config.json i hånden.
+check('feltet til manuelle adresser findes', (await page.$('#manual-ips-input')) !== null);
+check('det er foldet sammen når højttalerne blev fundet',
+  (await page.$eval('#manual-ips', (node) => node.open)) === false);
+await page.$eval('#manual-ips', (node) => { node.open = true; });
+check('hjælpeteksten er oversat',
+  (await page.textContent('#manual-ips')).includes('multicast'));
+
+await page.fill('#manual-ips-input', '10.0.0.5, 10.0.0.6');
+await page.click('#btn-manual-ips');
+await page.waitForTimeout(450);
+check('adresserne gemmes i plugin-konfigurationen',
+  (await page.evaluate(() => window.__config[0].playerIps)) === '10.0.0.5, 10.0.0.6',
+  await page.evaluate(() => String(window.__config[0].playerIps)));
+check('og der kvitteres for at der blev fundet noget',
+  (await page.textContent('body')).includes('14'));
+
+// Én adresse finder ingenting i mocken: brugeren skal få det at vide.
+await page.fill('#manual-ips-input', '10.0.0.5');
+await page.click('#btn-manual-ips');
+await page.waitForTimeout(450);
+check('ingen svar giver en advarsel frem for tavshed',
+  (await page.$$('.sf-toast.is-warn')).length >= 1);
+await page.evaluate(() => document.querySelectorAll('.sf-toast').forEach((n) => n.remove()));
+await page.fill('#manual-ips-input', '');
+await page.click('#btn-manual-ips');
+await page.waitForTimeout(400);
+await page.evaluate(() => document.querySelectorAll('.sf-toast').forEach((n) => n.remove()));
 
 // A status pill that wraps inside its own oval looks broken.
 const measurePills = () =>

@@ -80,6 +80,26 @@
       <div id="new-players"></div>
       <div id="player-grid" class="sf-player-grid"></div>
       <div id="group-map" class="sf-group-map"></div>
+
+      <details id="manual-ips" class="sf-card sf-manual">
+        <summary data-i18n="ui.sonos.manualTitle">Højttalere der ikke bliver fundet</summary>
+        <p class="sf-help" data-i18n="ui.sonos.manualHelp">
+          Blokerer dit netværk multicast mellem VLAN'er, svarer højttalerne ikke på den
+          almindelige søgning. Skriv én adresse — resten findes gennem den.
+        </p>
+        <div class="sf-manual-row">
+          <input
+            id="manual-ips-input"
+            class="sf-input"
+            type="text"
+            data-i18n-ph="ui.sonos.manualPlaceholder"
+            placeholder="192.168.1.40, 192.168.1.41"
+          />
+          <button id="btn-manual-ips" class="sf-btn sf-btn--primary" type="button" data-i18n="ui.sonos.manualSave">
+            Gem og søg
+          </button>
+        </div>
+      </details>
     </section>
 
     <section class="sf-panel-tab" data-panel="library">

@@ -445,6 +445,12 @@ module.exports = {
   'ui.sonos.summary': '{players} speakers in {groups} groups.',
   'ui.sonos.summaryOneGroup': '{players} speakers in 1 group.',
   'ui.sonos.rediscover': 'Search for speakers again',
+  'ui.sonos.manualTitle': 'Speakers that are not being found',
+  'ui.sonos.manualHelp':
+    'If your network blocks multicast between VLANs, the speakers will not answer the ordinary search. Give one address — the rest are discovered through it. Separate several with commas.',
+  'ui.sonos.manualPlaceholder': '192.168.1.40, 192.168.1.41',
+  'ui.sonos.manualSave': 'Save and search',
+  'ui.sonos.manualNothing': 'Still nothing answered. Check the addresses, and that the speakers are powered on.',
   'ui.sonos.searching': 'Searching…',
   'ui.sonos.found': 'Found {count} speakers.',
   'ui.sonos.playing': 'Playing',

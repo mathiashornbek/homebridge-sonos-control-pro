@@ -674,3 +674,15 @@ input[type="range"]::-moz-range-thumb {
   background: var(--sf-warn-soft); color: var(--sf-warn);
   font-size: 0.8rem; font-weight: 600;
 }
+
+/* Manual speaker addresses — folded away until discovery comes back empty,
+   which is the only moment it is the answer to anything. */
+.sf-manual { margin-top: 16px; padding: 0 18px 18px; }
+.sf-manual > summary {
+  padding: 16px 0 12px; font-size: 1rem; font-weight: 700;
+  color: var(--sf-heading); cursor: pointer; list-style: revert;
+}
+.sf-manual > summary::marker { color: var(--sf-muted); }
+.sf-manual .sf-help { margin: 0 0 12px; }
+.sf-manual-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.sf-manual-row .sf-input { flex: 1 1 240px; min-width: 0; }

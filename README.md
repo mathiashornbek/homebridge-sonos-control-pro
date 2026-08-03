@@ -14,7 +14,7 @@
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?color=4f46e5" alt="downloads" /></a>
   <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/badge/licence-MIT-4f46e5" alt="MIT licence" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 and 2.x" />
-  <img src="https://img.shields.io/badge/tests-127%20%2B%20100-4f46e5" alt="127 unit tests, 100 browser checks" />
+  <img src="https://img.shields.io/badge/tests-131%20%2B%20106-4f46e5" alt="131 unit tests, 106 browser checks" />
 </p>
 
 ---
@@ -274,7 +274,7 @@ The settings page shows two fields on purpose. These are still read from `config
 
 | Key | Default | Does |
 | --- | --- | --- |
-| `playerIps` | — | Fixed IP addresses, for networks that block multicast. Comma separated; one is enough. |
+| `playerIps` | — | Fixed IP addresses, for networks that block multicast. Comma separated; one is enough. Also settable on the **Sonos** tab, which is easier. |
 | `discoveryTimeoutMs` | `4000` | How long to listen for speakers at startup. |
 | `rediscoverIntervalMs` | `300000` | How often to look for new speakers. |
 | `topologyIntervalMs` | `30000` | How often grouping is re-read. |
@@ -286,7 +286,7 @@ The settings page shows two fields on purpose. These are still read from `config
 
 ## 🩺 Troubleshooting
 
-**🔍 No speakers found.** Some networks block multicast between VLANs, or have AP isolation on. Put one speaker's IP address in `config.json` under `playerIps` — the rest are discovered through it.
+**🔍 No speakers found.** Some networks block multicast between VLANs, or have AP isolation on. Open the **Sonos** tab — the address box opens by itself when nothing is found — and give it one speaker's IP address. The rest of the household is discovered through it, and it takes effect straight away.
 
 **🏷️ A scene names a room that no longer exists.** Renaming a room in the Sonos app renames it everywhere. The scene list marks affected scenes in red and names the missing room; open the scene and pick the new name.
 
@@ -301,8 +301,8 @@ The settings page shows two fields on purpose. These are still read from `config
 Issues and pull requests are very welcome. The test suite is the contract:
 
 ```bash
-npm test        # 127 unit and integration tests against a full mock Sonos household
-npm run test:ui # 100 checks driving the real settings UI in Chromium
+npm test        # 131 unit and integration tests against a full mock Sonos household
+npm run test:ui # 106 checks driving the real settings UI in Chromium
 ```
 
 The mock household in `test/mock-sonos.js` speaks real SOAP over real HTTP on loopback, with configurable latency, real queue update IDs and speakers that can appear mid-run — so the tests exercise the actual protocol, not a stub of it. 🧪

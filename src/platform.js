@@ -75,6 +75,28 @@ class SonosControlPlatform {
   }
 
   /**
+   * Point discovery at a fixed set of addresses, without a restart.
+   *
+   * The one setting a user on a segmented network genuinely needs, and the one
+   * they could not reach: a custom settings UI replaces Homebridge's form, so
+   * `playerIps` could only be set by hand-editing config.json — which is a poor
+   * answer for the very people whose speakers are not being found.
+   *
+   * @param {string|string[]} value
+   * @returns {Promise<{hosts: string[], found: number}>}
+   */
+  async setPlayerIps(value) {
+    const hosts = parseHosts(value);
+    this.config.playerIps = hosts.join(', ');
+    this.system.seedHosts = hosts;
+    // Discovery keeps what it already knows unless asked afresh, and the point
+    // of typing an address is to try it now rather than at the next sweep.
+    await this.system.discover({ force: true });
+    await this.system.getLibrary({ force: true }).catch(() => {});
+    return { hosts, found: this.system.list().length };
+  }
+
+  /**
    * Change the language of everything this process says, without a restart.
    *
    * The settings UI writes the choice to config.json for next time and calls

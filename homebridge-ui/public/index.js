@@ -772,12 +772,20 @@ function renderPlayers() {
   const groupMap = $('#group-map');
   renderNewPlayers();
 
+  const manual = $('#manual-ips');
+
   if (!state.players.length) {
     grid.innerHTML = '';
     groupMap.innerHTML = '';
     summary.textContent = t(state.connected ? 'ui.sonos.noneFound' : 'ui.sonos.noneOffline');
+    // Nothing was found: this is the one moment the address box is the answer,
+    // so open it rather than leaving it folded away under everything.
+    if (manual && state.connected) manual.open = true;
     return;
   }
+
+  // Found some — fold it back, unless addresses are how they were found.
+  if (manual && !state.playerIps) manual.open = false;
 
   summary.textContent =
     state.groups.length === 1
@@ -2321,6 +2329,38 @@ function wireApp() {
     }
   });
 
+  $('#btn-manual-ips').addEventListener('click', async () => {
+    const field = $('#manual-ips-input');
+    const value = field.value.trim();
+    homebridge.showSpinner();
+    try {
+      // The bridge first, so the addresses are tried now rather than at the
+      // next restart — then config.json, so they survive one.
+      const result = await api('POST', '/playerIps', { playerIps: value });
+      // Remembered, so the panel stays open while addresses are in use — they
+      // are how these speakers were found, and the first thing to check if one
+      // of them stops answering.
+      state.playerIps = value;
+      const configs = await homebridge.getPluginConfig();
+      if (configs?.length) {
+        const [config, ...rest] = configs;
+        await homebridge.updatePluginConfig([{ ...config, playerIps: value }, ...rest]);
+        await homebridge.savePluginConfig();
+      }
+      await bootstrap({ quiet: true });
+      toast(
+        result?.found
+          ? t('ui.sonos.found', { count: result.found })
+          : t('ui.sonos.manualNothing'),
+        result?.found ? 'success' : 'warn',
+      );
+    } catch {
+      /* reported */
+    } finally {
+      homebridge.hideSpinner();
+    }
+  });
+
   $('#btn-reload-library').addEventListener('click', async () => {
     homebridge.showSpinner();
     try {
@@ -2653,6 +2693,9 @@ async function applyPreset(id, mode) {
     // Sending 'auto' instead would make the settings and the Homebridge log
     // disagree on an English-locale machine.
     state.configuredLanguage = configs?.[0]?.language || '';
+    state.playerIps = configs?.[0]?.playerIps || '';
+    const field = $('#manual-ips-input');
+    if (field) field.value = state.playerIps;
   } catch {
     state.configuredLanguage = '';
   }

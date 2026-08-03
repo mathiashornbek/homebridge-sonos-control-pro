@@ -431,6 +431,54 @@ test('a household with no seeds at all is the same, quiet, story', async () => {
   assert.equal(warnings.length, 1);
 });
 
+// --------------------------------------------------- what the verifier checks
+
+test('config.schema.json is the shape Homebridge and the verifier expect', () => {
+  // Every one of these was a red cross from the verification bot, and none of
+  // them is visible by looking at the settings page — it renders fine either
+  // way. So they are asserted rather than remembered.
+  const schema = require('../config.schema.json');
+
+  assert.equal(schema.pluginType, 'platform');
+  assert.equal(schema.pluginAlias, 'SonosControlPro');
+  assert.ok(schema.schema.properties.name, 'a name property is required of every plugin');
+
+  // `required` is an array at the object level, never a boolean on a field.
+  // JSON Schema has no boolean `required` on a property; Homebridge tolerates
+  // it, the verifier does not, and it never meant anything.
+  assert.ok(Array.isArray(schema.schema.required), '`required` must be an array');
+  const boolRequired = Object.entries(schema.schema.properties)
+    .filter(([, value]) => typeof value.required === 'boolean')
+    .map(([key]) => key);
+  assert.deepEqual(boolRequired, [], `boolean "required" on: ${boolRequired.join(', ')}`);
+
+  // And everything named as required must actually exist.
+  for (const key of schema.schema.required) {
+    assert.ok(schema.schema.properties[key], `required names "${key}", which has no property`);
+  }
+});
+
+test('package.json declares what the verifier needs to see', () => {
+  const pkg = require('../package.json');
+  assert.ok(pkg.keywords.includes('homebridge-plugin'), 'the keyword the UI searches for');
+  // A plugin must say which transport it speaks. This one exposes switches
+  // through HAP and does nothing over Matter.
+  assert.ok(
+    pkg.keywords.includes('supports-hap') || pkg.keywords.includes('supports-matter'),
+    'one of supports-hap / supports-matter must be declared',
+  );
+  for (const field of ['homepage', 'repository', 'bugs', 'license', 'main', 'engines']) {
+    assert.ok(pkg[field], `package.json is missing ${field}`);
+  }
+  for (const script of ['preinstall', 'install', 'postinstall']) {
+    assert.equal(pkg.scripts[script], undefined, `${script} must not exist`);
+  }
+  for (const forbidden of ['homebridge', 'hap-nodejs']) {
+    assert.equal(pkg.dependencies?.[forbidden], undefined, `${forbidden} must not be a dependency`);
+    assert.equal(pkg.peerDependencies?.[forbidden], undefined, `${forbidden} must not be a peer`);
+  }
+});
+
 test('the suite never broadcasts on the machine it is running on', async () => {
   // The guard for the guard. Every SonosSystem a test builds hands in its own
   // sweep; if one ever forgets, the default is the real SSDP one and the suite

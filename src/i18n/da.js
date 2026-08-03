@@ -447,6 +447,12 @@ module.exports = {
   'ui.sonos.summary': '{players} højttalere i {groups} grupper.',
   'ui.sonos.summaryOneGroup': '{players} højttalere i 1 gruppe.',
   'ui.sonos.rediscover': 'Søg efter højttalere igen',
+  'ui.sonos.manualTitle': 'Højttalere der ikke bliver fundet',
+  'ui.sonos.manualHelp':
+    'Blokerer dit netværk multicast mellem VLAN\'er, svarer højttalerne ikke på den almindelige søgning. Skriv én adresse — resten findes gennem den. Adskil flere med komma.',
+  'ui.sonos.manualPlaceholder': '192.168.1.40, 192.168.1.41',
+  'ui.sonos.manualSave': 'Gem og søg',
+  'ui.sonos.manualNothing': 'Der svarede stadig ingen. Tjek adresserne, og at højttalerne er tændt.',
   'ui.sonos.searching': 'Søger…',
   'ui.sonos.found': 'Fandt {count} højttalere.',
   'ui.sonos.playing': 'Spiller',

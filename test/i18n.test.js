@@ -43,6 +43,8 @@ test('no string is left empty or accidentally identical across both languages', 
     'common.dash',
     'action.playUri.uri',
     'action.playUri.uriPlaceholder',
+    // Two example IP addresses. There is no Danish for 192.168.1.40.
+    'ui.sonos.manualPlaceholder',
     'action.playRadio.radio',
     'action.pause.label',
     'action.stop.label',

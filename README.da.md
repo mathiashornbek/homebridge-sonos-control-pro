@@ -14,7 +14,7 @@
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?color=4f46e5" alt="downloads" /></a>
   <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/badge/licens-MIT-4f46e5" alt="MIT-licens" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 og 2.x" />
-  <img src="https://img.shields.io/badge/tests-127%20%2B%20100-4f46e5" alt="127 tests, 100 browserkontroller" />
+  <img src="https://img.shields.io/badge/tests-131%20%2B%20106-4f46e5" alt="131 tests, 106 browserkontroller" />
 </p>
 
 ---
@@ -274,7 +274,7 @@ Indstillingssiden viser to felter med vilje. Disse læses stadig fra `config.jso
 
 | Nøgle | Standard | Gør |
 | --- | --- | --- |
-| `playerIps` | — | Faste IP-adresser, til netværk der blokerer multicast. Kommasepareret; én er nok. |
+| `playerIps` | — | Faste IP-adresser, til netværk der blokerer multicast. Kommasepareret; én er nok. Kan også sættes på **Sonos**-fanen, hvilket er nemmere. |
 | `discoveryTimeoutMs` | `4000` | Hvor længe der lyttes efter højttalere ved opstart. |
 | `rediscoverIntervalMs` | `300000` | Hvor tit der ledes efter nye højttalere. |
 | `topologyIntervalMs` | `30000` | Hvor tit grupperingen læses igen. |
@@ -286,7 +286,7 @@ Indstillingssiden viser to felter med vilje. Disse læses stadig fra `config.jso
 
 ## 🩺 Fejlfinding
 
-**🔍 Ingen højttalere fundet.** Nogle netværk blokerer multicast mellem VLAN'er eller har AP-isolation slået til. Skriv én højttalers IP-adresse i `config.json` under `playerIps` — resten findes gennem den.
+**🔍 Ingen højttalere fundet.** Nogle netværk blokerer multicast mellem VLAN'er eller har AP-isolation slået til. Åbn **Sonos**-fanen — adressefeltet folder sig selv ud, når der ikke blev fundet noget — og skriv én højttalers IP-adresse. Resten af husstanden findes gennem den, og det virker med det samme.
 
 **🏷️ En scene nævner et rum, der ikke findes længere.** Omdøber du et rum i Sonos-appen, omdøbes det overalt. Scenelisten markerer de berørte scener med rødt og nævner det manglende rum; åbn scenen og vælg det nye navn.
 
@@ -301,8 +301,8 @@ Indstillingssiden viser to felter med vilje. Disse læses stadig fra `config.jso
 Issues og pull requests er meget velkomne. Testsuiten er kontrakten:
 
 ```bash
-npm test        # 127 tests mod en komplet efterligning af en Sonos-husstand
-npm run test:ui # 100 kontroller der styrer den rigtige brugerflade i Chromium
+npm test        # 131 tests mod en komplet efterligning af en Sonos-husstand
+npm run test:ui # 106 kontroller der styrer den rigtige brugerflade i Chromium
 ```
 
 Efterligningen i `test/mock-sonos.js` taler ægte SOAP over ægte HTTP på loopback, med indstillelig forsinkelse, rigtige kø-id'er og højttalere der kan dukke op midt i en kørsel — så testene afprøver den faktiske protokol, ikke en attrap. 🧪
