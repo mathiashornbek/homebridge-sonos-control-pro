@@ -1,4 +1,7 @@
-# Ændringslog
+# Ændringslog (dansk)
+
+> Den løbende ændringslog er nu [`CHANGELOG.md`](CHANGELOG.md) på engelsk.
+> Denne fil bevarer den danske historik frem til og med 3.0.1.
 
 ## 3.0.1
 
@@ -130,7 +133,7 @@ Ud fra loggen fra rigtig brug. Det vigtigste fund stod på to linjer:
 
 ## 2.1.0
 
-Optimeringer ud fra rigtige tal fra Ranunkelvej. Lydstyrke og pause lå allerede på 27–50 ms; det var opstarten og `Baggrundsmusik` der kunne gøres bedre.
+Optimeringer ud fra rigtige målinger. Lydstyrke og pause lå allerede på 27–50 ms; det var opstarten og `Baggrundsmusik` der kunne gøres bedre.
 
 - **Køen genbruges.** Det dyreste en scene laver er at skubbe en Spotify-playliste på køen — Sonos henter den fra tjenesten, og det er hvad der gjorde `Baggrundsmusik` til 1–2 sekunder mod `Afspil DR P3`'s ½. Trykker du scenen igen mens den samme playliste stadig ligger i køen, springes hentningen helt over, og der sendes kun et Play. Køens `UpdateID` sammenlignes, så har du skiftet musik i Sonos-appen i mellemtiden, hentes playlisten selvfølgelig igen.
 - **Lydstyrken sættes samtidig med at kilden loader** i stedet for bagefter. De to ting er uafhængige, og grupperingen sker stadig først bagefter, så hver højttaler beholder sit eget niveau.
@@ -227,5 +230,5 @@ Første version.
 - Grafisk backend med scene-liste (træk for at sortere), scene-editor med tidslinje, live Sonos-oversigt, favoritvælger, afprøvning af hele scener og enkelte trin, aktivitetslog, import/eksport og backup.
 - Samlet "Musikscene"-handling: gruppeleder, kilde, forlad-liste, lydstyrke pr. højttaler og to fælles forsinkelser i ét trin.
 - Målgruppefilter "kun dem der spiller lige nu", så en lydstyrkeregulering ikke rører stille højttalere.
-- Preset der genskaber de syv Homey-flows fra Ranunkelvej 59 1:1.
+- Preset med færdige scener, klar til at bygge videre på.
 - Scener gemmes adskilt fra `config.json` med atomare skrivninger, automatisk backup og karantæne af ulæselige filer.
