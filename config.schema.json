@@ -1,0 +1,51 @@
+{
+  "pluginAlias": "SonosControlPro",
+  "pluginType": "platform",
+  "singular": true,
+  "customUi": true,
+  "customUiPath": "./homebridge-ui",
+  "headerDisplay": "**Sonos Control Pro** — dine musikscener som kontakter i Apple Home. Alt styres lokalt over netværket; ingen sky, ingen hub.\n\n*Your music scenes as switches in Apple Home. Everything is controlled locally over the network — no cloud, no hub.*",
+  "footerDisplay": "Scenerne gemmes i `sonos-control-pro/scenes.json` ved siden af din Homebridge-config. Alt andet — højttalere, favoritter, scener og afprøvning — foregår i plugin'ets egen backend. *Scenes live in `sonos-control-pro/scenes.json` next to your Homebridge config. Everything else — speakers, favourites, scenes and testing — happens in the plugin's own backend.*",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Navn / Name",
+        "type": "string",
+        "default": "Sonos Control Pro",
+        "required": true,
+        "description": "Vises i Homebridge-loggen. / Shown in the Homebridge log."
+      },
+      "language": {
+        "title": "Sprog / Language",
+        "type": "string",
+        "default": "da",
+        "oneOf": [
+          {
+            "title": "Følg systemet / Follow the system",
+            "enum": [
+              "auto"
+            ]
+          },
+          {
+            "title": "Dansk",
+            "enum": [
+              "da"
+            ]
+          },
+          {
+            "title": "English",
+            "enum": [
+              "en"
+            ]
+          }
+        ],
+        "description": "Sproget i indstillingerne og i Homebridge-loggen. \"Følg systemet\" bruger maskinens sprogindstilling. / The language used in the settings and in the Homebridge log. \"Follow the system\" uses the machine's locale."
+      }
+    }
+  },
+  "layout": [
+    "name",
+    "language"
+  ]
+}

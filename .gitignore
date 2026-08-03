@@ -1,0 +1,7 @@
+node_modules/
+package-lock.json
+*.tgz
+*.log
+.DS_Store
+transfer.zip
+render-icon.mjs

@@ -1,0 +1,182 @@
+<link rel="stylesheet" href="styles.css" />
+
+<div class="sf-app" id="app">
+  <header class="sf-header">
+    <div class="sf-header-main">
+      <div class="sf-brand">
+        <span class="sf-brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <rect x="1.6" y="6.9" width="13" height="10.2" rx="5.1" fill="currentColor" fill-opacity="0.28"/>
+            <rect x="1.6" y="6.9" width="13" height="10.2" rx="5.1" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="10.1" cy="12" r="3.15" fill="currentColor"/>
+            <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9">
+              <path d="M17.1 9.4a4.2 4.2 0 0 1 0 5.2"/>
+              <path d="M20.2 7.3a8 8 0 0 1 0 9.4" stroke-opacity="0.55"/>
+            </g>
+          </svg>
+        </span>
+        <div>
+          <h1 data-i18n="app.name">Sonos Control Pro</h1>
+          <p class="sf-subtitle" data-i18n="app.tagline">Dine musikscener som kontakter i Apple Home</p>
+        </div>
+      </div>
+      <div class="sf-header-actions">
+        <span id="status-pill" class="sf-pill sf-pill--muted" data-i18n="ui.status.connecting">Forbinder…</span>
+        <label class="sf-lang" id="lang-wrap">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <select id="lang-picker" class="sf-lang-select" data-i18n-title="settings.language" title="Sprog"></select>
+        </label>
+        <button id="btn-refresh" class="sf-btn sf-btn--ghost" type="button" data-i18n-title="common.refresh" title="Opdatér">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+          <span data-i18n="common.refresh">Opdatér</span>
+        </button>
+      </div>
+    </div>
+
+    <nav class="sf-tabs" role="tablist">
+      <button class="sf-tab is-active" data-tab="scenes" role="tab" type="button" data-i18n="ui.tab.scenes">Scener</button>
+      <button class="sf-tab" data-tab="sonos" role="tab" type="button" data-i18n="ui.tab.sonos">Sonos</button>
+      <button class="sf-tab" data-tab="library" role="tab" type="button" data-i18n="ui.tab.library">Favoritter</button>
+      <button class="sf-tab" data-tab="tools" role="tab" type="button" data-i18n="ui.tab.tools">Import &amp; backup</button>
+      <button class="sf-tab" data-tab="activity" role="tab" type="button" data-i18n="ui.tab.activity">Aktivitet</button>
+    </nav>
+  </header>
+
+  <div id="offline-banner" class="sf-banner sf-banner--warn is-hidden"></div>
+
+  <main class="sf-main">
+    <section class="sf-panel-tab is-active" data-panel="scenes">
+      <div class="sf-toolbar">
+        <div class="sf-toolbar-left">
+          <input id="scene-search" class="sf-input sf-input--search" type="search" data-i18n-ph="ui.scenes.search" placeholder="Søg i scener…" />
+        </div>
+        <div class="sf-toolbar-right">
+          <button id="btn-new-scene" class="sf-btn sf-btn--primary" type="button">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span data-i18n="ui.scenes.new">Ny scene</span>
+          </button>
+        </div>
+      </div>
+      <div id="scene-list" class="sf-scene-list"></div>
+      <div id="scene-empty" class="sf-empty is-hidden">
+        <h3 data-i18n="ui.scenes.emptyTitle">Ingen scener endnu</h3>
+        <p data-i18n="ui.scenes.emptyBody">Hent fire scener der virker med det samme, eller byg din egen fra bunden.</p>
+        <div class="sf-empty-actions">
+          <button class="sf-btn sf-btn--primary" data-act="apply-preset" type="button" data-i18n="ui.scenes.emptyPreset">Hent de fire startscener</button>
+          <button class="sf-btn sf-btn--ghost" data-act="new-scene" type="button" data-i18n="ui.scenes.emptyNew">Ny tom scene</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="sf-panel-tab" data-panel="sonos">
+      <div class="sf-toolbar">
+        <div class="sf-toolbar-left">
+          <p class="sf-help" id="sonos-summary" data-i18n="ui.status.connecting">Forbinder…</p>
+        </div>
+        <div class="sf-toolbar-right">
+          <button id="btn-rediscover" class="sf-btn sf-btn--ghost" type="button" data-i18n="ui.sonos.rediscover">Søg efter højttalere igen</button>
+        </div>
+      </div>
+      <div id="new-players"></div>
+      <div id="player-grid" class="sf-player-grid"></div>
+      <div id="group-map" class="sf-group-map"></div>
+    </section>
+
+    <section class="sf-panel-tab" data-panel="library">
+      <div class="sf-toolbar">
+        <div class="sf-toolbar-left">
+          <input id="library-search" class="sf-input sf-input--search" type="search" data-i18n-ph="ui.library.search" placeholder="Søg i favoritter, playlister og radio…" />
+        </div>
+        <div class="sf-toolbar-right">
+          <button id="btn-reload-library" class="sf-btn sf-btn--ghost" type="button" data-i18n="ui.library.reload">Hent fra Sonos igen</button>
+        </div>
+      </div>
+      <div id="library-content" class="sf-library"></div>
+    </section>
+
+    <section class="sf-panel-tab" data-panel="tools">
+      <div id="preset-cards" class="sf-card-grid"></div>
+
+      <div class="sf-card">
+        <div class="sf-card-head">
+          <div>
+            <h2 data-i18n="ui.tools.exportTitle">Eksport og import</h2>
+            <p class="sf-help" data-i18n="ui.tools.exportHelp">Gem alle scener som en JSON-fil, eller læs en ind igen.</p>
+          </div>
+        </div>
+        <div class="sf-card-body sf-row sf-row--wrap">
+          <button id="btn-export" class="sf-btn sf-btn--ghost" type="button" data-i18n="ui.tools.download">Download scener som JSON</button>
+          <label class="sf-btn sf-btn--ghost sf-file-label">
+            <span data-i18n="ui.tools.import">Importér JSON-fil</span>
+            <input id="file-import" type="file" accept="application/json,.json" hidden />
+          </label>
+          <button id="btn-copy-json" class="sf-btn sf-btn--ghost" type="button" data-i18n="ui.tools.copy">Kopiér JSON til udklipsholder</button>
+        </div>
+      </div>
+
+      <div class="sf-card">
+        <div class="sf-card-head">
+          <div>
+            <h2 data-i18n="ui.tools.backupsTitle">Backups</h2>
+            <p class="sf-help" data-i18n="ui.tools.backupsHelp">Der gemmes automatisk en version hver gang du ændrer noget. De 20 nyeste beholdes.</p>
+          </div>
+          <button id="btn-reload-backups" class="sf-btn sf-btn--ghost" type="button" data-i18n="common.refresh">Opdatér</button>
+        </div>
+        <div id="backup-list" class="sf-card-body sf-list"></div>
+      </div>
+    </section>
+
+    <section class="sf-panel-tab" data-panel="activity">
+      <div class="sf-toolbar">
+        <div class="sf-toolbar-left">
+          <p class="sf-help" data-i18n="ui.activity.help">De seneste sceneafviklinger, trin for trin — nyttigt når noget ikke gør som forventet.</p>
+        </div>
+        <div class="sf-toolbar-right">
+          <button id="btn-reload-history" class="sf-btn sf-btn--ghost" type="button" data-i18n="common.refresh">Opdatér</button>
+        </div>
+      </div>
+      <div id="history-list" class="sf-list"></div>
+    </section>
+  </main>
+</div>
+
+<div id="editor-backdrop" class="sf-backdrop is-hidden">
+  <div class="sf-drawer" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+    <header class="sf-drawer-head">
+      <div>
+        <h2 id="editor-title">Rediger scene</h2>
+        <p class="sf-help" id="editor-subtitle"></p>
+      </div>
+      <div class="sf-row">
+        <button id="editor-test" class="sf-btn sf-btn--ghost" type="button" data-i18n="ui.editor.test">Afprøv nu</button>
+        <button id="editor-close" class="sf-btn sf-btn--icon" type="button" data-i18n-aria="common.close" aria-label="Luk">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </header>
+    <div id="editor-body" class="sf-drawer-body"></div>
+    <footer class="sf-drawer-foot">
+      <span id="editor-dirty" class="sf-help"></span>
+      <div class="sf-row">
+        <button id="editor-cancel" class="sf-btn sf-btn--ghost" type="button" data-i18n="common.cancel">Annullér</button>
+        <button id="editor-save" class="sf-btn sf-btn--primary" type="button" data-i18n="ui.editor.save">Gem scene</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<div id="dialog-backdrop" class="sf-backdrop sf-backdrop--dialog is-hidden">
+  <div class="sf-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title">
+    <h3 id="dialog-title"></h3>
+    <p id="dialog-body" class="sf-help"></p>
+    <div id="dialog-extra"></div>
+    <div class="sf-dialog-actions">
+      <button id="dialog-cancel" class="sf-btn sf-btn--ghost" type="button" data-i18n="common.cancel">Annullér</button>
+      <button id="dialog-confirm" class="sf-btn sf-btn--primary" type="button" data-i18n="dialog.ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="sf-toasts"></div>
+
+<script src="index.js"></script>

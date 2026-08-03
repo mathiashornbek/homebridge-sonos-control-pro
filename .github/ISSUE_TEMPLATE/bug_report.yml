@@ -1,0 +1,42 @@
+name: Bug report
+description: Something does not behave the way it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The **Activity** tab in the plugin's settings
+        shows every step of a scene run with its duration and the speaker's own
+        answer — that is usually the fastest way to see what went wrong.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce it
+      placeholder: |
+        1. Build a scene with …
+        2. Press it
+        3. …
+    validations: { required: true }
+  - type: textarea
+    id: log
+    attributes:
+      label: Homebridge log
+      description: The lines around the failure. Debug mode (`-D`) gives far more.
+      render: text
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      placeholder: "Plugin 3.1.0 · Homebridge 1.8.5 · Node 20.18.0 · Debian 12"
+    validations: { required: true }
+  - type: input
+    id: speakers
+    attributes:
+      label: Speakers
+      placeholder: "14 rooms, incl. one stereo pair and an Arc"

@@ -1,0 +1,659 @@
+/*
+ * Homebridge injects its own theme stylesheet into custom-UI iframes, so every
+ * colour here is set explicitly rather than inherited — otherwise headings end
+ * up dark-on-dark the moment the user switches theme.
+ */
+
+:root {
+  --sf-bg: #f5f7fa;
+  --sf-surface: #ffffff;
+  --sf-surface-soft: #f7f9fb;
+  --sf-surface-sunken: #eef2f6;
+  --sf-border: #dde4ec;
+  --sf-border-strong: #c6d1dd;
+  --sf-text: #1b2733;
+  --sf-heading: #0d1720;
+  --sf-muted: #62748a;
+  --sf-accent: #4f46e5;
+  --sf-accent-strong: #4338ca;
+  --sf-accent-soft: rgba(79, 70, 229, 0.1);
+  --sf-accent-text: #ffffff;
+  --sf-good: #0e8a5f;
+  --sf-good-soft: #e3f6ee;
+  --sf-warn: #a15c00;
+  --sf-warn-soft: #fdf1dd;
+  --sf-danger: #c02626;
+  --sf-danger-soft: #fdeaea;
+  --sf-shadow: 0 1px 2px rgba(16, 30, 45, 0.05), 0 4px 14px rgba(16, 30, 45, 0.06);
+  --sf-shadow-lg: 0 24px 60px rgba(16, 30, 45, 0.22);
+  --sf-radius: 14px;
+  --sf-radius-sm: 9px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sf-bg: #12161c;
+    --sf-surface: #1a2029;
+    --sf-surface-soft: #1f2732;
+    --sf-surface-sunken: #151b23;
+    --sf-border: #2b3542;
+    --sf-border-strong: #3a4658;
+    --sf-text: #dfe6ee;
+    --sf-heading: #f3f7fb;
+    --sf-muted: #94a3b6;
+    --sf-accent: #7c78f0;
+    --sf-accent-strong: #918eff;
+    --sf-accent-soft: rgba(124, 120, 240, 0.16);
+    --sf-accent-text: #10121a;
+    --sf-good: #43c895;
+    --sf-good-soft: rgba(67, 200, 149, 0.14);
+    --sf-warn: #e0a458;
+    --sf-warn-soft: rgba(224, 164, 88, 0.14);
+    --sf-danger: #f0736e;
+    --sf-danger-soft: rgba(240, 115, 110, 0.14);
+    --sf-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.35);
+    --sf-shadow-lg: 0 30px 70px rgba(0, 0, 0, 0.55);
+  }
+}
+
+* { box-sizing: border-box; }
+
+/* Homebridge sizes this iframe to its content, so the page itself never
+   scrolls — which means a sticky header is inert and its background is just a
+   grey rectangle painted across the top of the host's white dialog. Let the
+   host's own backdrop show through instead; the cards carry the structure. */
+html, body {
+  background: transparent;
+}
+
+body {
+  margin: 0;
+  /* The settings UI lives in a narrow modal; nothing may force it sideways. */
+  overflow-x: hidden;
+  color: var(--sf-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Comfortable breathing room on every side: the host dialog puts its own
+   frame right up against this, and text touching an edge looks unfinished. */
+.sf-app { max-width: 1080px; margin: 0 auto; padding: 20px 22px 36px; }
+
+/* ---------------------------------------------------------------- header */
+
+.sf-header {
+  padding-top: 4px;
+  margin-bottom: 18px;
+}
+
+.sf-header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sf-brand { display: flex; gap: 12px; align-items: center; min-width: 0; }
+
+.sf-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(140deg, var(--sf-accent), #8b5cf6);
+  color: #fff;
+  box-shadow: 0 6px 16px var(--sf-accent-soft);
+  flex: none;
+}
+
+.sf-brand h1 { margin: 0; font-size: 1.2rem; font-weight: 700; letter-spacing: -0.01em; color: var(--sf-heading); line-height: 1.25; }
+.sf-subtitle { margin: 2px 0 0; color: var(--sf-muted); font-size: 0.82rem; line-height: 1.35; }
+.sf-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+.sf-tabs {
+  display: flex;
+  gap: 2px;
+  margin-top: 16px;
+  border-bottom: 1px solid var(--sf-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sf-tabs::-webkit-scrollbar { display: none; }
+
+.sf-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--sf-muted);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 9px 13px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+/* The first tab sits flush with the logo, search field and cards below it,
+   so the whole left edge reads as one line. */
+.sf-tab:first-child { padding-left: 0; }
+.sf-tab:hover { color: var(--sf-text); }
+.sf-tab.is-active { color: var(--sf-accent); border-bottom-color: var(--sf-accent); }
+
+.sf-panel-tab { display: none; }
+.sf-panel-tab.is-active { display: block; animation: sf-fade 0.18s ease; }
+
+@keyframes sf-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ------------------------------------------------------------- primitives */
+
+.sf-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: var(--sf-radius-sm);
+  border: 1px solid transparent;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.87rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+}
+.sf-btn:active { transform: translateY(1px); }
+.sf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sf-btn--primary { background: var(--sf-accent); color: var(--sf-accent-text); }
+.sf-btn--primary:hover:not(:disabled) { background: var(--sf-accent-strong); }
+.sf-btn--ghost { background: var(--sf-surface); color: var(--sf-text); border-color: var(--sf-border); }
+.sf-btn--ghost:hover:not(:disabled) { border-color: var(--sf-border-strong); background: var(--sf-surface-soft); }
+.sf-btn--danger { background: var(--sf-danger-soft); color: var(--sf-danger); border-color: transparent; }
+.sf-btn--danger:hover:not(:disabled) { background: var(--sf-danger); color: #fff; }
+.sf-btn--icon { padding: 7px; background: transparent; color: var(--sf-muted); border-color: transparent; }
+.sf-btn--icon:hover { background: var(--sf-surface-sunken); color: var(--sf-text); }
+.sf-btn--sm { padding: 5px 10px; font-size: 0.8rem; }
+
+.sf-input, .sf-select, textarea.sf-input {
+  width: 100%;
+  padding: 8px 11px;
+  border-radius: var(--sf-radius-sm);
+  border: 1px solid var(--sf-border);
+  background: var(--sf-surface);
+  color: var(--sf-text);
+  font: inherit;
+  font-size: 0.88rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sf-input:focus, .sf-select:focus, textarea.sf-input:focus {
+  outline: none;
+  border-color: var(--sf-accent);
+  box-shadow: 0 0 0 3px var(--sf-accent-soft);
+}
+.sf-input--search { flex: 1 1 240px; max-width: 420px; }
+.sf-toolbar-left { flex: 1 1 240px; }
+textarea.sf-input { resize: vertical; min-height: 62px; }
+
+.sf-field { display: grid; gap: 5px; }
+.sf-field > label, .sf-label { font-weight: 600; font-size: 0.82rem; color: var(--sf-heading); }
+.sf-field small, .sf-hint { color: var(--sf-muted); font-size: 0.78rem; line-height: 1.4; }
+.sf-help { color: var(--sf-muted); margin: 0; font-size: 0.85rem; }
+
+.sf-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.sf-row { display: flex; align-items: center; gap: 8px; }
+.sf-row--wrap { flex-wrap: wrap; }
+.sf-spacer { flex: 1; }
+.is-hidden { display: none !important; }
+
+.sf-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: 999px; padding: 4px 11px;
+  font-size: 0.76rem; font-weight: 600; line-height: 1.35;
+  border: 1px solid var(--sf-border);
+  background: var(--sf-surface); color: var(--sf-muted);
+  /* A two-word label must never wrap inside the oval — that reads as broken. */
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.sf-pill--sm { padding: 3px 9px; font-size: 0.71rem; }
+.sf-pill--good { background: var(--sf-good-soft); color: var(--sf-good); border-color: transparent; }
+.sf-pill--warn { background: var(--sf-warn-soft); color: var(--sf-warn); border-color: transparent; }
+.sf-pill--danger { background: var(--sf-danger-soft); color: var(--sf-danger); border-color: transparent; }
+.sf-pill--accent { background: var(--sf-accent-soft); color: var(--sf-accent); border-color: transparent; }
+.sf-pill--muted { background: var(--sf-surface-sunken); }
+
+.sf-banner {
+  border-radius: var(--sf-radius);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 0.87rem;
+  border: 1px solid transparent;
+}
+.sf-banner--warn { background: var(--sf-warn-soft); color: var(--sf-warn); }
+.sf-banner--ok { background: var(--sf-good-soft); color: var(--sf-good); }
+
+.sf-toolbar {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.sf-toolbar-left, .sf-toolbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.sf-card {
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  box-shadow: var(--sf-shadow);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.sf-card-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 14px; padding: 16px 18px 12px;
+}
+.sf-card-head h2 { margin: 0 0 3px; font-size: 1rem; font-weight: 700; color: var(--sf-heading); }
+.sf-card-body { padding: 0 18px 18px; }
+.sf-card-grid { display: grid; gap: 16px; }
+
+.sf-empty {
+  text-align: center;
+  padding: 40px 24px;
+  border: 1px dashed var(--sf-border-strong);
+  border-radius: var(--sf-radius);
+  background: var(--sf-surface-soft);
+}
+.sf-empty h3 { margin: 0 0 6px; color: var(--sf-heading); font-size: 1.02rem; }
+.sf-empty p { margin: 0; color: var(--sf-muted); }
+.sf-empty p + .sf-empty-actions { margin-top: 18px; }
+.sf-empty-mark {
+  display: grid; place-items: center;
+  width: 44px; height: 44px; margin: 0 auto 12px;
+  border-radius: 12px;
+  background: var(--sf-surface-sunken); color: var(--sf-muted);
+}
+.sf-empty-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+.sf-list { display: grid; gap: 8px; }
+.sf-list-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-soft);
+}
+.sf-list-row strong { color: var(--sf-heading); font-weight: 600; }
+
+/* ------------------------------------------------------------ scene cards */
+
+.sf-scene-list { display: grid; gap: 10px; }
+
+.sf-scene {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  padding: 13px 15px;
+  box-shadow: var(--sf-shadow);
+  transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+.sf-scene:hover { border-color: var(--sf-border-strong); }
+.sf-scene.is-dragging { opacity: 0.45; }
+.sf-scene.is-drop-target { border-color: var(--sf-accent); box-shadow: 0 0 0 3px var(--sf-accent-soft); }
+.sf-scene.is-disabled { opacity: 0.62; }
+.sf-scene.is-running { border-color: var(--sf-accent); box-shadow: 0 0 0 3px var(--sf-accent-soft); }
+
+.sf-drag {
+  cursor: grab; color: var(--sf-muted); display: grid; place-items: center;
+  width: 20px; flex: none; opacity: 0.65;
+}
+.sf-drag:active { cursor: grabbing; }
+
+.sf-scene-icon {
+  width: 40px; height: 40px; flex: none;
+  border-radius: 11px;
+  display: grid; place-items: center;
+  background: var(--sf-accent-soft);
+  color: var(--sf-accent);
+}
+
+.sf-scene-body { flex: 1 1 200px; min-width: 0; }
+.sf-scene-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sf-scene-title h3 { margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--sf-heading); overflow-wrap: anywhere; }
+.sf-scene-desc {
+  margin: 4px 0 0; color: var(--sf-muted); font-size: 0.82rem;
+  line-height: 1.45;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px;
+  overflow: hidden;
+  /* Two full lines, with room for descenders — a clipped 'g' looks like a bug. */
+  max-height: 3.1em;
+}
+.sf-seg { white-space: nowrap; }
+.sf-sep { color: var(--sf-border-strong); }
+.sf-scene-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-left: auto; }
+
+/* Switch */
+.sf-switch { position: relative; display: inline-block; width: 38px; height: 22px; flex: none; }
+.sf-switch input { opacity: 0; width: 0; height: 0; }
+.sf-switch span {
+  position: absolute; inset: 0; cursor: pointer;
+  background: var(--sf-border-strong); border-radius: 999px;
+  transition: background 0.18s ease;
+}
+.sf-switch span::before {
+  content: ""; position: absolute; height: 16px; width: 16px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%; transition: transform 0.18s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.sf-switch input:checked + span { background: var(--sf-good); }
+.sf-switch input:checked + span::before { transform: translateX(16px); }
+
+/* ----------------------------------------------------------- player grid */
+
+.sf-player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 12px; }
+
+.sf-player {
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  padding: 14px;
+  box-shadow: var(--sf-shadow);
+}
+.sf-player-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 10px; margin-bottom: 8px;
+}
+.sf-player-head > div { min-width: 0; }
+.sf-player-name {
+  margin: 0; font-size: 0.88rem; font-weight: 700; line-height: 1.25;
+  color: var(--sf-heading); overflow-wrap: anywhere;
+}
+.sf-player-meta {
+  margin: 2px 0 0; font-size: 0.74rem; line-height: 1.35; color: var(--sf-muted);
+  overflow-wrap: anywhere;
+}
+.sf-player-track {
+  margin: 0 0 9px;
+  font-size: 0.79rem;
+  color: var(--sf-accent);
+  font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sf-player-controls { display: flex; align-items: center; gap: 8px; }
+.sf-volume { flex: 1; }
+.sf-volume-value { font-variant-numeric: tabular-nums; font-size: 0.78rem; color: var(--sf-muted); min-width: 34px; text-align: right; }
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; border-radius: 999px;
+  background: var(--sf-border-strong); outline: none; margin: 0;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--sf-accent); cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 15px; height: 15px; border: 0; border-radius: 50%;
+  background: var(--sf-accent); cursor: pointer;
+}
+
+.sf-group-map { margin-top: 18px; display: grid; gap: 10px; }
+.sf-group {
+  border: 1px solid var(--sf-border); border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-soft); padding: 11px 14px;
+}
+.sf-group h4 { margin: 0 0 6px; font-size: 0.84rem; color: var(--sf-heading); }
+
+/* -------------------------------------------------------------- library */
+
+.sf-library { display: grid; gap: 16px; }
+.sf-lib-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.sf-lib-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: var(--sf-radius-sm);
+  border: 1px solid var(--sf-border); background: var(--sf-surface-soft);
+}
+/*
+ * The note mark is always drawn and the artwork is laid on top of it, so a
+ * cover that never loads simply uncovers the mark. The previous version swapped
+ * the two from an `onerror` attribute — whose payload contained double quotes,
+ * which closed the attribute early and spilled `'}))" />` onto the page.
+ */
+.sf-lib-art {
+  position: relative;
+  width: 34px; height: 34px; border-radius: 7px; flex: none;
+  background: var(--sf-surface-sunken);
+  display: grid; place-items: center;
+  color: var(--sf-muted);
+  overflow: hidden;
+}
+.sf-lib-art > svg { opacity: 0.6; }
+.sf-lib-art > img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover;
+}
+.sf-lib-text { min-width: 0; }
+.sf-lib-text strong { display: block; font-size: 0.84rem; color: var(--sf-heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sf-lib-text small { color: var(--sf-muted); font-size: 0.75rem; }
+
+/* --------------------------------------------------------------- drawer */
+
+.sf-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(9, 14, 20, 0.5);
+  backdrop-filter: blur(2px);
+  display: flex; justify-content: flex-end;
+  animation: sf-fade 0.15s ease;
+}
+
+.sf-drawer {
+  width: min(760px, 100%);
+  height: 100%;
+  background: var(--sf-bg);
+  display: flex; flex-direction: column;
+  box-shadow: var(--sf-shadow-lg);
+  animation: sf-slide 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes sf-slide { from { transform: translateX(28px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+
+.sf-drawer-head {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; border-bottom: 1px solid var(--sf-border);
+  background: var(--sf-surface);
+}
+.sf-drawer-head h2 { margin: 0; font-size: 1.05rem; color: var(--sf-heading); }
+.sf-drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px 28px; }
+.sf-drawer-foot {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 13px 20px; border-top: 1px solid var(--sf-border); background: var(--sf-surface);
+}
+
+.sf-section { margin-bottom: 20px; }
+.sf-section > h3 {
+  margin: 0 0 4px; font-size: 0.82rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--sf-muted);
+}
+.sf-section-help { margin: 0 0 11px; color: var(--sf-muted); font-size: 0.83rem; }
+
+.sf-box {
+  background: var(--sf-surface); border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius); padding: 15px;
+}
+
+/* ------------------------------------------------------------ step cards */
+
+.sf-steps { display: grid; gap: 10px; }
+
+.sf-step {
+  background: var(--sf-surface); border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius); overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+.sf-step.is-open { border-color: var(--sf-accent); }
+.sf-step.is-drop-target { border-color: var(--sf-accent); box-shadow: 0 0 0 3px var(--sf-accent-soft); }
+.sf-step.is-dragging { opacity: 0.45; }
+.sf-step.is-off { opacity: 0.6; }
+
+.sf-step-head {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 13px; cursor: pointer;
+}
+.sf-step-index {
+  width: 22px; height: 22px; flex: none; border-radius: 6px;
+  display: grid; place-items: center;
+  background: var(--sf-surface-sunken); color: var(--sf-muted);
+  font-size: 0.72rem; font-weight: 700;
+}
+.sf-step-title { flex: 1; min-width: 0; }
+.sf-step-title strong { display: block; font-size: 0.88rem; color: var(--sf-heading); }
+.sf-step-title small { color: var(--sf-muted); font-size: 0.78rem; }
+.sf-step-body { padding: 0 13px 15px; display: grid; gap: 14px; border-top: 1px solid var(--sf-border); padding-top: 14px; }
+
+/* Speaker chips */
+.sf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sf-chip {
+  appearance: none; font: inherit; cursor: pointer;
+  border-radius: 999px; padding: 5px 12px;
+  font-size: 0.81rem; font-weight: 600;
+  border: 1px solid var(--sf-border);
+  background: var(--sf-surface-soft); color: var(--sf-muted);
+  transition: all 0.14s ease;
+}
+.sf-chip:hover { border-color: var(--sf-border-strong); color: var(--sf-text); }
+.sf-chip.is-on { background: var(--sf-accent); border-color: var(--sf-accent); color: var(--sf-accent-text); }
+.sf-chip.is-leader { background: var(--sf-good-soft); border-color: transparent; color: var(--sf-good); }
+.sf-chip.is-missing { border-style: dashed; color: var(--sf-danger); border-color: var(--sf-danger); }
+.sf-chip--mini { padding: 3px 9px; font-size: 0.75rem; }
+
+/* Volume map */
+.sf-volmap { display: grid; gap: 7px; }
+.sf-volrow {
+  display: grid; grid-template-columns: minmax(110px, 150px) 1fr 46px 30px;
+  align-items: center; gap: 10px;
+  padding: 6px 9px; border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-soft); border: 1px solid var(--sf-border);
+}
+.sf-volrow.is-unset { opacity: 0.55; }
+.sf-volrow-name { font-size: 0.83rem; font-weight: 600; color: var(--sf-heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sf-volrow-value { font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--sf-muted); text-align: right; }
+
+/* Timeline */
+.sf-timeline { display: grid; gap: 5px; }
+.sf-tl-row { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 10px; font-size: 0.78rem; }
+.sf-tl-time { color: var(--sf-muted); font-variant-numeric: tabular-nums; text-align: right; }
+.sf-tl-bar {
+  background: var(--sf-accent-soft); color: var(--sf-accent);
+  border-radius: 6px; padding: 4px 10px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sf-tl-bar.is-secondary { background: var(--sf-surface-sunken); color: var(--sf-muted); }
+
+/* Result / history */
+.sf-result { display: grid; gap: 5px; margin-top: 10px; }
+.sf-result-row {
+  display: flex; gap: 9px; align-items: baseline;
+  font-size: 0.81rem; padding: 6px 10px; border-radius: 7px;
+  background: var(--sf-surface-sunken);
+}
+.sf-result-row.is-bad { background: var(--sf-danger-soft); color: var(--sf-danger); }
+.sf-result-row.is-skip { opacity: 0.7; }
+.sf-result-row code { font-size: 0.76rem; color: var(--sf-muted); }
+
+/* Toasts */
+.sf-toasts {
+  position: fixed; right: 18px; bottom: 18px; z-index: 90;
+  display: grid; gap: 9px; justify-items: end;
+  pointer-events: none;
+}
+.sf-toast {
+  background: var(--sf-surface); border: 1px solid var(--sf-border);
+  border-left: 3px solid var(--sf-accent);
+  border-radius: var(--sf-radius-sm); padding: 11px 15px;
+  box-shadow: var(--sf-shadow); min-width: 240px; max-width: 380px;
+  font-size: 0.85rem; color: var(--sf-text);
+  animation: sf-toast-in 0.2s ease;
+  display: flex; align-items: center; gap: 12px;
+  /* The toast itself ignores the pointer; only its action button takes it, so
+     a message never blocks a click on whatever is underneath. */
+  pointer-events: none;
+}
+.sf-toast-action {
+  pointer-events: auto;
+  margin-left: auto; flex: 0 0 auto;
+  background: var(--sf-accent-soft); color: var(--sf-accent);
+  border: none; border-radius: 7px; padding: 5px 11px;
+  font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+}
+.sf-toast-action:hover { background: var(--sf-accent); color: var(--sf-accent-text); }
+.sf-toast.is-good { border-left-color: var(--sf-good); }
+.sf-toast.is-bad { border-left-color: var(--sf-danger); }
+.sf-toast.is-warn { border-left-color: var(--sf-warn); }
+@keyframes sf-toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.sf-file-label { position: relative; }
+.sf-spin { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--sf-border-strong); border-top-color: var(--sf-accent); border-radius: 50%; animation: sf-rotate 0.7s linear infinite; }
+@keyframes sf-rotate { to { transform: rotate(360deg); } }
+
+/* In a narrow modal the buttons drop to their own line rather than being
+   pushed out of sight. */
+@media (max-width: 720px) {
+  .sf-scene-body { flex: 1 1 100%; }
+  .sf-scene-actions { width: 100%; justify-content: flex-end; margin-left: 0; }
+}
+
+@media (max-width: 620px) {
+  .sf-volrow { grid-template-columns: 1fr 44px 28px; }
+  .sf-volrow input[type="range"] { grid-column: 1 / -1; }
+  .sf-drawer-head { flex-direction: column; align-items: stretch; }
+  .sf-scene { flex-wrap: wrap; }
+  .sf-scene-actions { width: 100%; justify-content: flex-end; }
+}
+
+
+/* ── Language picker ──────────────────────────────────────────────────────
+   Sits next to the status pill: a globe and a select that looks like a chip
+   rather than a form control, so it reads as a setting and not as a field. */
+.sf-lang {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 6px 4px 9px; border-radius: 999px;
+  border: 1px solid var(--sf-border); background: var(--sf-surface);
+  color: var(--sf-muted); cursor: pointer; flex: 0 0 auto;
+}
+.sf-lang:hover { border-color: var(--sf-border-strong); color: var(--sf-text); }
+.sf-lang-select {
+  appearance: none; border: none; background: transparent;
+  font: inherit; font-size: 0.79rem; font-weight: 600;
+  color: var(--sf-text); cursor: pointer; padding: 0 4px 0 0;
+}
+.sf-lang-select:focus { outline: none; }
+.sf-lang:focus-within { border-color: var(--sf-accent); box-shadow: 0 0 0 3px var(--sf-accent-soft); }
+
+/* ── Dialogs ──────────────────────────────────────────────────────────────
+   Replaces window.confirm/prompt, which the browser draws in its own chrome,
+   in its own language, wherever it likes. */
+.sf-backdrop--dialog { z-index: 120; align-items: center; justify-content: center; }
+.sf-dialog {
+  width: min(420px, calc(100% - 32px));
+  background: var(--sf-surface); color: var(--sf-text);
+  border: 1px solid var(--sf-border); border-radius: var(--sf-radius);
+  box-shadow: var(--sf-shadow-lg); padding: 22px 24px 18px;
+  animation: sf-dialog-in 0.16s ease;
+}
+.sf-dialog h3 { margin: 0 0 6px; font-size: 1.02rem; color: var(--sf-heading); line-height: 1.35; }
+.sf-dialog .sf-help { margin: 0; }
+.sf-dialog .sf-help.is-hidden { display: none; }
+.sf-dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
+@keyframes sf-dialog-in { from { transform: translateY(6px) scale(0.985); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ── Inline validation ────────────────────────────────────────────────────
+   Said where the mistake is, while it is being made — not in a toast after
+   pressing save. */
+.sf-inline-warn {
+  display: grid; gap: 4px; margin-bottom: 13px;
+  padding: 9px 12px; border-radius: var(--sf-radius-sm);
+  background: var(--sf-warn-soft); color: var(--sf-warn);
+  font-size: 0.8rem; font-weight: 600;
+}

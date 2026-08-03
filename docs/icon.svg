@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Sonos Control Pro">
+  <title>Sonos Control Pro</title>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5b53f0" />
+      <stop offset="52%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+
+    <!-- A single soft highlight across the top, so the tile reads as a surface
+         rather than a flat swatch at large sizes. -->
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22" />
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+
+    <linearGradient id="knob" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e9e7ff" />
+    </linearGradient>
+
+    <filter id="lift" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#1a1145" flood-opacity="0.28" />
+    </filter>
+  </defs>
+
+  <!-- Tile -->
+  <rect width="512" height="512" rx="114" fill="url(#bg)" />
+  <rect width="512" height="512" rx="114" fill="url(#sheen)" />
+
+  <!-- Everything below sits inside the safe area, so the mark never crowds the
+       rounded corners at any size. -->
+  <g transform="translate(66 256) scale(0.885) translate(-66 -256)">
+  <!--
+    The mark is the plugin's whole idea in one shape: a switch, with sound
+    coming out of it. The track and knob say "this is a switch in Apple Home";
+    the three arcs say "what it turns on is the whole house".
+    Deliberately not a speaker grille — that belongs to Sonos, not to us.
+  -->
+  <g filter="url(#lift)">
+    <!-- Track -->
+    <rect x="66" y="196" width="248" height="120" rx="60" fill="#ffffff" fill-opacity="0.2" />
+    <rect x="66" y="196" width="248" height="120" rx="60" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="9" />
+    <!-- Knob, sitting in the "on" position -->
+    <circle cx="254" cy="256" r="44" fill="url(#knob)" />
+    <circle cx="254" cy="256" r="17" fill="#4f46e5" fill-opacity="0.92" />
+  </g>
+
+  <!-- Sound, leaving the switch -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-width="24">
+    <path d="M348 210a70 70 0 0 1 0 92" stroke-opacity="0.95" />
+    <path d="M398 176a124 124 0 0 1 0 160" stroke-opacity="0.7" />
+    <path d="M448 142a178 178 0 0 1 0 228" stroke-opacity="0.42" />
+  </g>
+  </g>
+</svg>
