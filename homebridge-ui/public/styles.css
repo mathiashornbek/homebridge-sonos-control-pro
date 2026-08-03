@@ -99,12 +99,14 @@ body {
 .sf-brand { display: flex; gap: 12px; align-items: center; min-width: 0; }
 
 /* The same tile as the app icon, so the settings page and the plugin browser
-   are recognisably the same product. */
+   are recognisably the same product. The radius is the icon's own — 114 of its
+   512 units — as a percentage, so it stays right whatever size the tile is. */
 .sf-brand-mark {
   display: grid;
   place-items: center;
   width: 38px; height: 38px;
-  border-radius: 12px;
+  border-radius: 22.3%;
+  overflow: hidden;
   background: linear-gradient(160deg, #d2c0a2, #bfab88);
   color: #1b1a16;
   box-shadow: 0 6px 16px rgba(120, 96, 56, 0.28);

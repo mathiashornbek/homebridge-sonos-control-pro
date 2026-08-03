@@ -433,12 +433,13 @@ test('a household with no seeds at all is the same, quiet, story', async () => {
 
 // -------------------------------------------------------------- the brand
 
-test('the settings header draws the same mark as the icon', async () => {
-  // These were two drawings of the same idea, and they drifted: the header had
-  // a rounder switch, the knob in a different place, and two sound waves where
-  // the icon has three. Side by side on the plugin page it read as a different
-  // logo. The header now reuses the icon's own geometry; this makes sure a
-  // change to one is a change to both.
+test('the settings header draws the icon, all of it', async () => {
+  // These were two drawings of the same idea, and they drifted twice. First the
+  // header had a rounder switch, the knob in a different place, and two sound
+  // waves where the icon has three. Then it was given the icon's own mark — but
+  // only the mark, so the tile in the settings page and the tile on the plugin
+  // page still did not match: one of them said SONOS and the other did not.
+  // Both groups are compared here, shape by shape.
   const fs = require('node:fs/promises');
   const path = require('node:path');
   const root = path.join(__dirname, '..');
@@ -447,20 +448,29 @@ test('the settings header draws the same mark as the icon', async () => {
   const mark = header.match(/<span class="sf-brand-mark"[\s\S]*?<\/span>/)?.[0];
   assert.ok(mark, 'the header has no brand mark');
 
-  // The shapes that make the mark what it is, in the icon's own coordinates.
+  // The shapes that make the mark what it is, in the icon's own coordinates,
+  // and the placement that decides its proportions.
   const shapes = [
+    'transform="translate(256 208) scale(0.75280) translate(-286.1 -252.0)"',
     'x="96" y="196" width="212" height="112" rx="56"',
     'cx="252" cy="252" r="38"',
     'M344 212a62 62 0 0 1 0 80',
     'M389 180a112 112 0 0 1 0 144',
     'M434 148a162 162 0 0 1 0 208',
+    // and the word underneath: where it sits, and the first and last letters.
+    'transform="translate(49.2 438) scale(0.05252)"',
+    'M1286 406Q1286 199 1132.5 89.5Q979 -20 682 -20',
+    '<path transform="translate(6511 0)"',
   ];
   for (const shape of shapes) {
     assert.ok(icon.includes(shape), `docs/icon.svg no longer contains ${shape}`);
-    assert.ok(mark.includes(shape), `the header mark is missing ${shape}`);
+    assert.ok(mark.includes(shape), `the header is missing ${shape}`);
   }
-  // Three waves, not two.
-  assert.equal((mark.match(/<path /g) || []).length, 3, 'the header mark must have three sound waves');
+
+  // Three sound waves and five letters.
+  assert.equal((mark.match(/<path /g) || []).length, 8, 'three waves and the five letters of SONOS');
+  // The icon's square, so nothing is cropped or stretched.
+  assert.ok(mark.includes('viewBox="0 0 512 512"'), 'the header must use the icon\'s own square');
 });
 
 // ------------------------------------------- hostile and hand-edited scenes

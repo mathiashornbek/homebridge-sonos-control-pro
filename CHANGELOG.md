@@ -135,6 +135,14 @@ to fail without it. The suite goes from 148 to 190.
   request and never finishes it is timed out instead of parked for five
   minutes.
 
+### The settings page
+
+- **The tile in the settings header was still not the icon.** It had already
+  been rebuilt once from the icon's own geometry — but only the mark, so one
+  tile said SONOS and the other did not. It is the whole icon now, in the
+  icon's own square, with the icon's own corner radius, and the test compares
+  both groups shape by shape.
+
 190 tests and 114 browser checks, on Node 22, 24 and 26, serially and eight
 runs at a time.
 
