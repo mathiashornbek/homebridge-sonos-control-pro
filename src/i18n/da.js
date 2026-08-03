@@ -141,7 +141,7 @@ module.exports = {
     'Med "alle" passer scenen sig selv, også når du sætter en ny højttaler op.',
   'action.groupAndPlay.leave': 'Højttalere der skal forlade gruppen',
   'action.groupAndPlay.leaveHelp':
-    'F.eks. Stue og Garage Soundboks, der skal spille noget andet — eller ingenting.',
+    'F.eks. stuen og garagen, der skal spille noget andet — eller ingenting.',
   'action.groupAndPlay.members': 'Højttalere i gruppen',
   'action.groupAndPlay.membersHelp': 'Disse tilsluttes gruppelederen. Gruppelederen er altid med.',
   'action.groupAndPlay.volumes': 'Lydstyrke pr. højttaler',

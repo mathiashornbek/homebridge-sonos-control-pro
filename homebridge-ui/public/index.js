@@ -635,9 +635,20 @@ function wireSceneDrag(list) {
   if (list.dataset.wired) return;
   list.dataset.wired = '1';
   let dragged = null;
+  let fromHandle = false;
+  list.addEventListener('mousedown', (event) => {
+    fromHandle = Boolean(event.target.closest('.sf-drag'));
+  });
+  list.addEventListener('mouseup', () => {
+    fromHandle = false;
+  });
   list.addEventListener('dragstart', (event) => {
     const card = event.target.closest('.sf-scene');
     if (!card) return;
+    if (!fromHandle) {
+      event.preventDefault();
+      return;
+    }
     dragged = card;
     card.classList.add('is-dragging');
     event.dataTransfer.effectAllowed = 'move';
@@ -646,6 +657,7 @@ function wireSceneDrag(list) {
     dragged?.classList.remove('is-dragging');
     $$('.sf-scene', list).forEach((card) => card.classList.remove('is-drop-target'));
     dragged = null;
+    fromHandle = false;
   });
   list.addEventListener('dragover', (event) => {
     event.preventDefault();
@@ -1501,7 +1513,13 @@ function renderGroupAndPlay(step, listKey) {
             <span class="sf-volrow-name" title="${escapeHtml(name)}">${escapeHtml(name)}${name === coordinator ? ' ★' : ''}</span>
             <input type="range" min="0" max="100" value="${set ? value : 10}"
                    data-act="vol-set" data-name="${escapeHtml(name)}" data-step="${step.id}" data-list="${listKey}" />
-            <span class="sf-volrow-value">${set ? `${value}%` : '—'}</span>
+            <span class="sf-volrow-num">
+              <input type="number" min="0" max="100" step="1" inputmode="numeric"
+                     value="${set ? value : ''}" placeholder="—"
+                     aria-label="${escapeHtml(name)}"
+                     data-act="vol-num" data-name="${escapeHtml(name)}" data-step="${step.id}" data-list="${listKey}" />
+              <span aria-hidden="true">%</span>
+            </span>
             <button type="button" class="sf-btn sf-btn--icon" data-act="vol-unset" data-name="${escapeHtml(name)}" data-step="${step.id}" data-list="${listKey}" title="${escapeHtml(t('ui.editor.dontTouch'))}">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
@@ -1909,6 +1927,14 @@ async function onEditorClick(event) {
 }
 
 function onEditorChange(event) {
+  if (event.target.dataset.act === 'vol-num') {
+    // Normalise what is on screen to what was stored: 250 becomes 100, 7.6
+    // becomes 8, and "abc" goes back to empty rather than sitting there.
+    const step = stepById(event.target.dataset.list, event.target.dataset.step);
+    const stored = step?.params?.volumes?.[event.target.dataset.name];
+    event.target.value = stored === undefined ? '' : stored;
+    return;
+  }
   const field = event.target.dataset.field;
   if (!field) return;
   const listKey = event.target.dataset.list;
@@ -1975,7 +2001,33 @@ function onEditorInput(event) {
     step.params.volumes[target.dataset.name] = Number(target.value);
     const row = target.closest('.sf-volrow');
     row.classList.remove('is-unset');
-    row.querySelector('.sf-volrow-value').textContent = `${target.value}%`;
+    row.querySelector('.sf-volrow-num input').value = target.value;
+    markDirty();
+    return;
+  }
+
+  /*
+   * The typed percentage.
+   *
+   * A slider is fine for finding a level by ear and hopeless for saying "12".
+   * Clearing the field is the same as pressing ×: this speaker is left alone.
+   */
+  if (target.dataset.act === 'vol-num') {
+    const step = stepById(target.dataset.list, target.dataset.step);
+    if (!step) return;
+    const row = target.closest('.sf-volrow');
+    const raw = target.value.trim();
+    step.params.volumes = { ...(step.params.volumes || {}) };
+    if (raw === '') {
+      delete step.params.volumes[target.dataset.name];
+      row.classList.add('is-unset');
+    } else {
+      const value = Math.max(0, Math.min(100, Math.round(Number(raw))));
+      if (!Number.isFinite(value)) return;
+      step.params.volumes[target.dataset.name] = value;
+      row.classList.remove('is-unset');
+      row.querySelector('input[type="range"]').value = value;
+    }
     markDirty();
     return;
   }
@@ -2037,9 +2089,28 @@ function readControl(element) {
 
 function wireStepDrag(root) {
   let dragged = null;
+  /*
+   * Only the grip starts a drag.
+   *
+   * The card is draggable, and a range input inside a draggable element hands
+   * the gesture to the parent — so reaching for a volume slider moved the whole
+   * step instead. The browser tells us nothing useful in dragstart (its target
+   * is the card, whatever you actually grabbed), so remember the mousedown.
+   */
+  let fromHandle = false;
+  root.addEventListener('mousedown', (event) => {
+    fromHandle = Boolean(event.target.closest('.sf-drag'));
+  });
+  root.addEventListener('mouseup', () => {
+    fromHandle = false;
+  });
   root.addEventListener('dragstart', (event) => {
     const card = event.target.closest('.sf-step');
     if (!card) return;
+    if (!fromHandle) {
+      event.preventDefault();
+      return;
+    }
     dragged = card;
     card.classList.add('is-dragging');
     event.dataTransfer.effectAllowed = 'move';
@@ -2048,6 +2119,7 @@ function wireStepDrag(root) {
     dragged?.classList.remove('is-dragging');
     $$('.sf-step', root).forEach((card) => card.classList.remove('is-drop-target'));
     dragged = null;
+    fromHandle = false;
   });
   root.addEventListener('dragover', (event) => {
     const card = event.target.closest('.sf-step');

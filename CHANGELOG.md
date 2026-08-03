@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.1.2
+
+### The level can be typed
+
+Reaching for a volume slider dragged the whole step. The step card is draggable so the list can be reordered, and a range input inside a draggable element hands the gesture to its parent — so a careful nudge from 8 % to 12 % moved the step three places down the list instead.
+
+A step is now dragged only by its grip, and so is a scene. The grip was always there with a tooltip saying what it does; now it is the only thing that starts a drag.
+
+And each speaker's level has a number field next to its slider. A slider is good for finding a level by ear and useless for saying "twelve". Type it, or drag it, whichever suits — they follow each other. Out-of-range numbers are clipped to 0–100 when you leave the field, and clearing it means the same as pressing × : leave this speaker alone.
+
+### A new icon
+
+Sand rather than indigo, with the mark — a switch, with sound coming out of it — over the name of the system it controls. The word is set in a plain grotesque and converted to outlines, so the icon needs no font wherever it is opened, and is deliberately not Sonos's own logotype, which is theirs. The settings header carries the same tile.
+
+### Smaller things
+
+- The mock household hangs up its own keep-alive sockets when a test finishes, rather than leaving the plugin's pooled agent holding ports open into the next test.
+- One help text still named two rooms from the house this plugin was first built for. It now says "the living room and the garage", like the English always did.
+
+124 unit tests and 100 browser checks.
+
 ## 3.1.1
 
 ### The test suite could not run on macOS

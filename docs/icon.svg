@@ -1,57 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Sonos Control Pro">
   <title>Sonos Control Pro</title>
-
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#5b53f0" />
-      <stop offset="52%" stop-color="#4f46e5" />
-      <stop offset="100%" stop-color="#8b5cf6" />
+    <linearGradient id="bg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0%" stop-color="#D2C0A2" />
+      <stop offset="100%" stop-color="#BFAB88" />
     </linearGradient>
-
-    <!-- A single soft highlight across the top, so the tile reads as a surface
-         rather than a flat swatch at large sizes. -->
-    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22" />
-      <stop offset="55%" stop-color="#ffffff" stop-opacity="0" />
-    </linearGradient>
-
-    <linearGradient id="knob" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color="#e9e7ff" />
-    </linearGradient>
-
-    <filter id="lift" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#1a1145" flood-opacity="0.28" />
-    </filter>
   </defs>
 
-  <!-- Tile -->
   <rect width="512" height="512" rx="114" fill="url(#bg)" />
-  <rect width="512" height="512" rx="114" fill="url(#sheen)" />
 
-  <!-- Everything below sits inside the safe area, so the mark never crowds the
-       rounded corners at any size. -->
-  <g transform="translate(66 256) scale(0.885) translate(-66 -256)">
   <!--
-    The mark is the plugin's whole idea in one shape: a switch, with sound
-    coming out of it. The track and knob say "this is a switch in Apple Home";
-    the three arcs say "what it turns on is the whole house".
-    Deliberately not a speaker grille — that belongs to Sonos, not to us.
+    The mark is the plugin's idea in one shape: a switch, with sound coming out
+    of it. Below it, the name of the system it controls — the word set in a
+    plain grotesque and converted to outlines, not Sonos's logotype, which is
+    theirs. Outlines rather than text so the icon renders identically wherever
+    it is opened, with no font to find.
   -->
-  <g filter="url(#lift)">
-    <!-- Track -->
-    <rect x="66" y="196" width="248" height="120" rx="60" fill="#ffffff" fill-opacity="0.2" />
-    <rect x="66" y="196" width="248" height="120" rx="60" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="9" />
-    <!-- Knob, sitting in the "on" position -->
-    <circle cx="254" cy="256" r="44" fill="url(#knob)" />
-    <circle cx="254" cy="256" r="17" fill="#4f46e5" fill-opacity="0.92" />
+  <g transform="translate(256 208) scale(0.75280) translate(-286.1 -252.0)">
+    <g>
+      <rect x="96" y="196" width="212" height="112" rx="56" fill="#1B1A16" fill-opacity="0.14" />
+      <rect x="96" y="196" width="212" height="112" rx="56" fill="none" stroke="#1B1A16" stroke-width="13" />
+      <circle cx="252" cy="252" r="38" fill="#1B1A16" />
+    </g>
+    <g fill="none" stroke="#1B1A16" stroke-linecap="round" stroke-width="22">
+      <path d="M344 212a62 62 0 0 1 0 80" />
+      <path d="M389 180a112 112 0 0 1 0 144" stroke-opacity="0.75" />
+      <path d="M434 148a162 162 0 0 1 0 208" stroke-opacity="0.46" />
+    </g>
   </g>
 
-  <!-- Sound, leaving the switch -->
-  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-width="24">
-    <path d="M348 210a70 70 0 0 1 0 92" stroke-opacity="0.95" />
-    <path d="M398 176a124 124 0 0 1 0 160" stroke-opacity="0.7" />
-    <path d="M448 142a178 178 0 0 1 0 228" stroke-opacity="0.42" />
-  </g>
-  </g>
+  <g transform="translate(49.2 438) scale(0.05252)" fill="#1B1A16"><g transform="scale(1 -1)"><path transform="translate(0 0)" d="M1286 406Q1286 199 1132.5 89.5Q979 -20 682 -20Q411 -20 257.0 76.0Q103 172 59 367L344 414Q373 302 457.0 251.5Q541 201 690 201Q999 201 999 389Q999 449 963.5 488.0Q928 527 863.5 553.0Q799 579 616 616Q458 653 396.0 675.5Q334 698 284.0 728.5Q234 759 199.0 802.0Q164 845 144.5 903.0Q125 961 125 1036Q125 1227 268.5 1328.5Q412 1430 686 1430Q948 1430 1079.5 1348.0Q1211 1266 1249 1077L963 1038Q941 1129 873.5 1175.0Q806 1221 680 1221Q412 1221 412 1053Q412 998 440.5 963.0Q469 928 525.0 903.5Q581 879 752 842Q955 799 1042.5 762.5Q1130 726 1181.0 677.5Q1232 629 1259.0 561.5Q1286 494 1286 406Z" /><path transform="translate(1486 0)" d="M1507 711Q1507 491 1420.0 324.0Q1333 157 1171.0 68.5Q1009 -20 793 -20Q461 -20 272.5 175.5Q84 371 84 711Q84 1050 272.0 1240.0Q460 1430 795 1430Q1130 1430 1318.5 1238.0Q1507 1046 1507 711ZM1206 711Q1206 939 1098.0 1068.5Q990 1198 795 1198Q597 1198 489.0 1069.5Q381 941 381 711Q381 479 491.5 345.5Q602 212 793 212Q991 212 1098.5 342.0Q1206 472 1206 711Z" /><path transform="translate(3199 0)" d="M995 0 381 1085Q399 927 399 831V0H137V1409H474L1097 315Q1079 466 1079 590V1409H1341V0Z" /><path transform="translate(4798 0)" d="M1507 711Q1507 491 1420.0 324.0Q1333 157 1171.0 68.5Q1009 -20 793 -20Q461 -20 272.5 175.5Q84 371 84 711Q84 1050 272.0 1240.0Q460 1430 795 1430Q1130 1430 1318.5 1238.0Q1507 1046 1507 711ZM1206 711Q1206 939 1098.0 1068.5Q990 1198 795 1198Q597 1198 489.0 1069.5Q381 941 381 711Q381 479 491.5 345.5Q602 212 793 212Q991 212 1098.5 342.0Q1206 472 1206 711Z" /><path transform="translate(6511 0)" d="M1286 406Q1286 199 1132.5 89.5Q979 -20 682 -20Q411 -20 257.0 76.0Q103 172 59 367L344 414Q373 302 457.0 251.5Q541 201 690 201Q999 201 999 389Q999 449 963.5 488.0Q928 527 863.5 553.0Q799 579 616 616Q458 653 396.0 675.5Q334 698 284.0 728.5Q234 759 199.0 802.0Q164 845 144.5 903.0Q125 961 125 1036Q125 1227 268.5 1328.5Q412 1430 686 1430Q948 1430 1079.5 1348.0Q1211 1266 1249 1077L963 1038Q941 1129 873.5 1175.0Q806 1221 680 1221Q412 1221 412 1053Q412 998 440.5 963.0Q469 928 525.0 903.5Q581 879 752 842Q955 799 1042.5 762.5Q1130 726 1181.0 677.5Q1232 629 1259.0 561.5Q1286 494 1286 406Z" /></g></g>
 </svg>

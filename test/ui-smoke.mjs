@@ -525,7 +525,47 @@ await page.$eval('.sf-volrow input[type=range]', (node) => {
   node.dispatchEvent(new Event('input', { bubbles: true }));
 });
 await page.waitForTimeout(120);
-check('lydstyrkeskyderen opdaterer værdien', (await page.textContent('.sf-volrow .sf-volrow-value')) === '55%');
+check('lydstyrkeskyderen opdaterer talfeltet',
+  (await page.inputValue('.sf-volrow .sf-volrow-num input')) === '55');
+
+// …and the number can be typed, because dragging a slider is a poor way to
+// say "12" — and used to drag the whole step with it.
+const numberField = '.sf-volrow .sf-volrow-num input';
+await page.fill(numberField, '12');
+await page.waitForTimeout(150);
+check('en indtastet procent lander i modellen',
+  (await page.$eval('.sf-volrow input[type="range"]', (node) => node.value)) === '12');
+await page.fill(numberField, '250');
+await page.dispatchEvent(numberField, 'change');
+await page.waitForTimeout(150);
+check('for store tal klippes til 100', (await page.inputValue(numberField)) === '100');
+await page.fill(numberField, '');
+await page.dispatchEvent(numberField, 'change');
+await page.waitForTimeout(150);
+check('et tomt felt betyder "rør ikke denne højttaler"',
+  await page.$eval('.sf-volrow', (node) => node.classList.contains('is-unset')));
+await page.fill(numberField, '55');
+await page.waitForTimeout(150);
+
+// A step may only be dragged by its grip; reaching for a slider used to move
+// the whole thing.
+const dragGate = await page.evaluate(() => {
+  const card = document.querySelector('.sf-step.is-open');
+  const slider = card.querySelector('.sf-volrow input[type="range"]');
+  const grip = card.querySelector('.sf-drag');
+  const start = (from) => {
+    from.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    const event = new Event('dragstart', { bubbles: true, cancelable: true });
+    event.dataTransfer = { effectAllowed: '' };
+    card.dispatchEvent(event);
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    card.dispatchEvent(new Event('dragend', { bubbles: true }));
+    return event.defaultPrevented;
+  };
+  return { fromSlider: start(slider), fromGrip: start(grip) };
+});
+check('en skyder starter ikke et træk af trinnet', dragGate.fromSlider === true, JSON.stringify(dragGate));
+check('grebet gør stadig', dragGate.fromGrip === false, JSON.stringify(dragGate));
 
 // Test a single step.
 await page.click('[data-act="test-step"]');

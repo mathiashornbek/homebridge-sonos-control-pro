@@ -98,14 +98,16 @@ body {
 
 .sf-brand { display: flex; gap: 12px; align-items: center; min-width: 0; }
 
+/* The same tile as the app icon, so the settings page and the plugin browser
+   are recognisably the same product. */
 .sf-brand-mark {
   display: grid;
   place-items: center;
   width: 38px; height: 38px;
   border-radius: 12px;
-  background: linear-gradient(140deg, var(--sf-accent), #8b5cf6);
-  color: #fff;
-  box-shadow: 0 6px 16px var(--sf-accent-soft);
+  background: linear-gradient(160deg, #d2c0a2, #bfab88);
+  color: #1b1a16;
+  box-shadow: 0 6px 16px rgba(120, 96, 56, 0.28);
   flex: none;
 }
 
@@ -531,7 +533,7 @@ input[type="range"]::-moz-range-thumb {
 /* Volume map */
 .sf-volmap { display: grid; gap: 7px; }
 .sf-volrow {
-  display: grid; grid-template-columns: minmax(110px, 150px) 1fr 46px 30px;
+  display: grid; grid-template-columns: minmax(110px, 150px) 1fr 70px 30px;
   align-items: center; gap: 10px;
   padding: 6px 9px; border-radius: var(--sf-radius-sm);
   background: var(--sf-surface-soft); border: 1px solid var(--sf-border);
@@ -539,6 +541,21 @@ input[type="range"]::-moz-range-thumb {
 .sf-volrow.is-unset { opacity: 0.55; }
 .sf-volrow-name { font-size: 0.83rem; font-weight: 600; color: var(--sf-heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sf-volrow-value { font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--sf-muted); text-align: right; }
+
+/* The level can be typed as well as dragged — a slider is good for finding a
+   level by ear and useless for saying "twelve". */
+.sf-volrow-num { display: flex; align-items: center; justify-content: flex-end; gap: 2px; font-size: 0.8rem; color: var(--sf-muted); }
+.sf-volrow-num input {
+  width: 44px; padding: 3px 5px;
+  border: 1px solid var(--sf-border); border-radius: 6px;
+  background: var(--sf-surface); color: var(--sf-text);
+  font: inherit; font-variant-numeric: tabular-nums; text-align: right;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.sf-volrow-num input::-webkit-outer-spin-button,
+.sf-volrow-num input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.sf-volrow-num input:focus { outline: none; border-color: var(--sf-accent); box-shadow: 0 0 0 3px var(--sf-accent-soft); }
+.sf-volrow.is-unset .sf-volrow-num input { color: var(--sf-muted); }
 
 /* Timeline */
 .sf-timeline { display: grid; gap: 5px; }
@@ -605,7 +622,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @media (max-width: 620px) {
-  .sf-volrow { grid-template-columns: 1fr 44px 28px; }
+  .sf-volrow { grid-template-columns: 1fr 70px 28px; }
   .sf-volrow input[type="range"] { grid-column: 1 / -1; }
   .sf-drawer-head { flex-direction: column; align-items: stretch; }
   .sf-scene { flex-wrap: wrap; }

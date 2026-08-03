@@ -2,6 +2,7 @@
 
 const http = require('node:http');
 const { parseXml, find, text, escapeXml } = require('../src/sonos/xml');
+const { agent } = require('../src/sonos/soap');
 
 /**
  * A fake Sonos household for the test suite.
@@ -134,7 +135,20 @@ class MockHousehold {
   }
 
   async close() {
-    await Promise.all(this.servers.map((server) => new Promise((resolve) => server.close(resolve))));
+    // The plugin keeps a pooled keep-alive agent, so sockets to these servers
+    // are still open when a test ends. `server.close()` waits for them, which
+    // can hang a whole file — and on the next test the ports are still taken.
+    // Hang up on our side first, then wait for the listeners to let go.
+    agent.destroy();
+    await Promise.all(
+      this.servers.map(
+        (server) =>
+          new Promise((resolve) => {
+            server.closeAllConnections?.();
+            server.close(resolve);
+          }),
+      ),
+    );
     this.servers = [];
   }
 
