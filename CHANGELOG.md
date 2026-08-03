@@ -1,5 +1,78 @@
 # Changelog
 
+All notable changes to **Sonos Control Pro**, newest first. Versions follow
+[semantic versioning](https://semver.org): the middle number moves when
+something new arrives, the last when something is put right.
+
+Each entry says what changed *and why*, because six months from now the why is
+the part nobody can reconstruct.
+
+📦 [npm](https://www.npmjs.com/package/homebridge-sonos-control-pro) ·
+🏷️ [Releases](https://github.com/mathiashornbek/homebridge-sonos-control-pro/releases) ·
+🐞 [Issues](https://github.com/mathiashornbek/homebridge-sonos-control-pro/issues)
+
+---
+
+## 3.1.6
+
+Everything here came out of auditing the plugin line by line against the
+[Homebridge verification criteria](https://github.com/homebridge/plugins/wiki/Verified-Plugins).
+Two of the findings were real faults that had been shipping for months.
+
+### A house with no Sonos in it crashed the search
+
+The branch that runs when nothing answers discovery tested a variable that had
+never existed. Instead of the sentence explaining what to do, you got
+`Sonos discovery failed: hosts is not defined` — and the settings page got the
+same `ReferenceError` back as a 500.
+
+It is the first thing anybody without working Sonos hardware sees: a reviewer,
+someone whose network blocks multicast between VLANs, anyone whose speakers are
+on a switch that is off. Every one of the 124 existing tests ran against a mock
+household that always answers, so nothing covered it. Two tests do now.
+
+While fixing it, the silence next to it turned out to be worse. If you *had*
+put addresses in `playerIps` and none of them answered, the plugin said nothing
+at all. It now names the addresses it could not reach.
+
+### Errors that had nowhere to go
+
+- The loopback control API only listened for a bind failure. Once it was up, an
+  error on the server — `accept()` running out of file descriptors on a busy Pi
+  — had no listener, and an `EventEmitter` with no `'error'` listener takes the
+  whole process down. It is a convenience API; it is never worth Homebridge.
+- The shutdown handler called six teardown functions unguarded. A throw from
+  any of them during shutdown crashed the bridge on its way out.
+- `httpGet` and the settings-page proxy had no `'error'` or `'aborted'`
+  handling on the response, so a player rebooting mid-reply burned the whole
+  timeout rather than failing immediately. `sendSoap` had had this for
+  versions; its two siblings had been missed.
+
+### English, unless you ask for Danish
+
+The default language was Danish — the house language of the machine it was
+written on. That was right when there was one user and wrong the moment it was
+published: a first install spoke Danish to somebody who had never asked for it.
+
+No setting now means the same as *Follow the system*: your language where this
+plugin has it, English where it does not. Setting `da` or `en` still means
+exactly that.
+
+Three Danish strings were also still embedded in `soap.js`, in an English
+install. The test that hunts for hard-coded Danish had missed them because none
+of them happened to contain æ, ø or å; its word list is longer now.
+
+### Smaller things
+
+- The licence badge said *package not found*. It is a plain badge now, and
+  cannot go looking for anything.
+- The Danish changelog is gone. One changelog, in English, is easier to trust
+  than two that can disagree.
+
+126 unit tests and 100 browser checks, on Node 22 and Node 24.
+
+---
+
 ## 3.1.5
 
 ### The screenshots are of a real house now
@@ -13,6 +86,8 @@ Two of them earn their place beyond looking real. The editor shot shows *Include
 The gallery the UI smoke test renders has moved to `docs/ui-gallery/` and is no longer committed. It was always a visual check on the interface rather than documentation, and keeping it in `docs/screenshots/` meant sixteen files nothing pointed at.
 
 The confirm-dialog and activity pictures are gone with it; those sections stand on their text until there are real ones to put back.
+
+---
 
 ## 3.1.4
 
@@ -36,6 +111,8 @@ The confirm-and-undo dialog was only ever captured in English, so the Danish pag
 
 No functional change. 124 unit tests and 100 browser checks.
 
+---
+
 ## 3.1.3
 
 ### The test suite could not run on a machine with cores to spare
@@ -45,6 +122,8 @@ No functional change. 124 unit tests and 100 browser checks.
 The mock speakers now listen on a port the operating system hands them, and announce it in their `LOCATION` header the way a real device does. Nothing is fixed, so nothing can collide: the suite runs at whatever parallelism the machine offers. The guard test checks the ports are ephemeral as well as distinct.
 
 124 unit tests and 100 browser checks, verified both serially and at ten-way parallelism.
+
+---
 
 ## 3.1.2
 
@@ -67,6 +146,8 @@ Sand rather than indigo, with the mark — a switch, with sound coming out of it
 
 124 unit tests and 100 browser checks.
 
+---
+
 ## 3.1.1
 
 ### The test suite could not run on macOS
@@ -85,6 +166,8 @@ For a normal household this changes nothing — Sonos always answers on 1400 —
 
 124 unit tests and 95 browser checks.
 
+---
+
 ## 3.1.0
 
 The release that turns a private build into a plugin anyone can install.
@@ -97,7 +180,7 @@ They are not a template you are stuck with. The only value a preset genuinely ca
 
 ### Documentation, in English
 
-`README.md` is now English and written for someone deciding whether to install this, with screenshots of the editor, the live speaker view, the favourites list and the activity log. The Danish text lives on in [`README.da.md`](README.da.md), and this changelog keeps its Danish history in [`CHANGELOG.da.md`](CHANGELOG.da.md).
+`README.md` is now English and written for someone deciding whether to install this, with screenshots of the editor, the live speaker view, the favourites list and the activity log. The Danish text lives on in [`README.da.md`](README.da.md).
 
 ### An icon of its own
 
@@ -118,6 +201,8 @@ A switch with sound coming out of it — the plugin's whole idea in one shape, a
 
 123 unit tests and 94 browser checks. The whole suite runs against a fictional household in `test/fixtures/household.js` rather than a real one — same shape, invented names — so the tests prove behaviour without carrying anyone's address around. New: the starter preset filling in its group leader, and naming its scenes in the chosen language.
 
+---
+
 ## 3.0.1
 
 ### `'}))" />` in the favourites list
@@ -131,6 +216,8 @@ The fix is to stop building markup inside an attribute: the note mark is now alw
 Homebridge's own form now shows only **Name** and **Language**. The entire "Advanced" block is gone, and with it the "Technical settings" card in the backend that did nothing but unfold it.
 
 The six keys (`playerIps`, `discoveryTimeoutMs`, `rediscoverIntervalMs`, `topologyIntervalMs`, `libraryTtlMs`, `controlPort`) are still read from `config.json` if present — they are simply not something you should trip over. The "no speakers found" message now points at the right place instead of a menu that no longer exists.
+
+---
 
 ## 3.0.0
 
@@ -170,6 +257,8 @@ An independent review of the whole change found eight things, all fixed: the lan
 - Three layers that still had Danish embedded — SOAP timeouts, topology errors and the new-speaker message — are translated too.
 - A test walks the code and fails if anyone writes Danish straight into a file again.
 
+---
+
 ## 2.4.0
 
 Deep hardening. An independent, adversarially-minded review found eight faults in execution — all reproduced, all fixed, all covered by tests.
@@ -200,6 +289,8 @@ Levels are now set completely **before** any sound is made. If something was lef
 
 Tests now also run with realistic network latency — several of the faults above were invisible with instant answers. Added: 200 random presses in a row with the group torn apart along the way, checking for hung runs, unhandled errors, and that a final press still leaves the house in a known state; and a check after every scene that the model of the household matches the speakers.
 
+---
+
 ## 2.3.0
 
 The eighteen seconds were not a collision between two scenes. The figure — 18014 ms — is three times the old 6000 ms SOAP timeout: three calls in a row where a speaker did not answer. The group had to be built from scratch, so all eleven joins were genuinely sent, and a single silent speaker along the way cost six seconds per call.
@@ -212,6 +303,8 @@ The eighteen seconds were not a collision between two scenes. The figure — 180
 - **A step taking over three seconds is now named in the log** along with what it was doing. Next time something is slow, the log explains itself.
 
 Building the whole group from scratch — exactly the situation from the log — is now a permanent test.
+
+---
 
 ## 2.2.0
 
@@ -238,6 +331,8 @@ From a real-world log. The most important finding was two lines:
 - At most three messages are shown at a time, so they do not cover what you are looking at.
 - The preset description is trimmed to one line.
 
+---
+
 ## 2.1.0
 
 Optimisations from real measurements. Volume and pause were already at 27–50 ms; it was startup and the playlist scene that could be improved.
@@ -245,6 +340,8 @@ Optimisations from real measurements. Volume and pause were already at 27–50 m
 - **The queue is reused.** The most expensive thing a scene does is push a streaming playlist onto the queue — Sonos fetches it from the service, and that is what made the playlist scene take 1–2 seconds against the radio scene's half. Press the scene again while the same playlist is still queued and the fetch is skipped entirely, sending only a Play. The queue's `UpdateID` is compared, so if you changed the music in the Sonos app in the meantime the playlist is of course fetched again.
 - **Levels are set while the source loads** instead of afterwards. The two are independent, and grouping still happens after, so each speaker keeps its own level.
 - **Startup is faster.** Speaker discovery used to wait out the whole search window — 4 seconds, every time. One answer is now enough, because one speaker can describe the whole household. That applies to the "Search for speakers again" button too, which now answers immediately.
+
+---
 
 ## 2.0.0
 
@@ -263,6 +360,8 @@ Renamed to **Sonos Control Pro**. The package is now `homebridge-sonos-control-p
 - **The status pill on the speaker cards wrapped inside its own oval.** It is now kept on one line, and the type sizes on the cards are tightened so a long room name sits properly.
 - **The top aligns.** The logo, the first tab and the search field did not share a left edge, and the sticky header sat as a detached grey block over the white dialog. The background is now continuous and everything lines up on the same edge.
 
+---
+
 ## 1.5.0
 
 - **Grouped speakers showed "Silent" even while playing.** Transport state was only read on the group leader; a speaker following a group has its own transport paused by Sonos and therefore reported nothing. State is now read once per group and applies to every member — a whole house in one group costs one network call instead of fourteen, and the answer matches what you actually hear in the room.
@@ -270,6 +369,8 @@ Renamed to **Sonos Control Pro**. The package is now `homebridge-sonos-control-p
 - **The Sonos view refreshes itself** every 5 seconds while the tab is open, and immediately when you switch to it. Only the speakers are fetched, so the rest of the page stays still. Nothing is fetched while the browser tab is hidden.
 - The cards now show **what is playing** — title and artist from the group.
 - The play/pause button targets the group and updates at once instead of after a full reload.
+
+---
 
 ## 1.4.0
 
@@ -279,6 +380,8 @@ Installation and updating now reach the machine Homebridge actually runs on.
 - **The right permissions.** Installation runs as the user that owns Homebridge's files, so nothing ends up root-owned and unreadable to the service afterwards.
 - The updater reports what it found: layout, plugin directory, storage directory, config path, npm, hb-service and which user the service runs as.
 - The release archive lives in the storage directory rather than in root's home, so it is covered by Homebridge's own backup.
+
+---
 
 ## 1.3.0
 
@@ -309,9 +412,13 @@ A pass over the whole plugin with an independent code review. Eleven real faults
 - **A new-speaker panel** on the Sonos tab: speakers with no level in your music scenes are highlighted, and one click gives them a level in all of them.
 - A scene pressed right after a restart now waits for the speakers to be found, instead of failing with "the speaker does not exist".
 
+---
+
 ## 1.2.0
 
 - A built-in update script for hand-distributed builds, with version archiving, `--list`, `--rollback` and `--no-restart`. (Removed in 3.1.0, when the plugin moved to npm.)
+
+---
 
 ## 1.1.0
 
@@ -319,6 +426,8 @@ A pass over the whole plugin with an independent code review. Eleven real faults
 - Transport commands (play, pause, stop, next, previous, toggle) are now sent only to group leaders. A group of 13 speakers costs one network call instead of 13, and the false "transition not available" errors from followers are gone.
 - Playing a favourite, playlist, radio station or URL on a speaker that is part of a group now targets the group leader, so the whole group plays it — instead of tearing the group apart.
 - Music scenes break the group leader out of a foreign group first if it is following another speaker. Otherwise the source would be refused or start in the wrong group.
+
+---
 
 ## 1.0.0
 

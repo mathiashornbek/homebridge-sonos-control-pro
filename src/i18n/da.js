@@ -33,6 +33,13 @@ module.exports = {
   'log.noPlayers':
     'Ingen Sonos-højttalere svarede. Blokerer dit netværk multicast, kan du skrive deres IP-adresser i config.json under "playerIps".',
   'log.discoveryFailed': 'Sonos-søgning fejlede: {message}',
+  'log.noPlayersAnswered':
+    'Ingen Sonos-højttaler svarede på {hosts}. Tjek adresserne i config.json under "playerIps", og at højttalerne er tændt.',
+  'log.controlApiError': 'Det lokale kontrol-API løb ind i et problem: {message}',
+  'log.stopFailed': 'Noget gik galt under nedlukningen: {message}',
+  'sonos.aborted': 'Afbrudt',
+  'sonos.lostConnection': '{service}.{action} mistede forbindelsen til {host}{detail}',
+  'sonos.replyAborted': 'svaret blev afbrudt',
   'log.newPlayers': 'Ny Sonos-højttaler fundet: {names}',
   'log.newPlayersMany': 'Nye Sonos-højttalere fundet: {names}',
   'log.accessoryAdded': '＋ Tilføjede kontakten "{name}" til Apple Home',

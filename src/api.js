@@ -62,6 +62,15 @@ class ControlApi {
       this.server.listen(this.port, '127.0.0.1');
     });
 
+    // The listener above only guards the bind. Once the server is up, an error
+    // on it — accept() hitting the file-descriptor ceiling on a busy Pi, say —
+    // has nowhere to go, and an EventEmitter with no 'error' listener throws
+    // the process down. The loopback control API is a convenience; it is never
+    // worth taking Homebridge with it.
+    this.server.on('error', (error) => {
+      this.log.warn?.(t('log.controlApiError', { message: error.message }));
+    });
+
     this.actualPort = this.server.address().port;
     fs.mkdirSync(this.dir, { recursive: true });
     fs.writeFileSync(

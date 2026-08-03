@@ -11,6 +11,11 @@ const crypto = require('node:crypto');
 const { SceneStore } = require('../src/store');
 const { SonosControlPlatform } = require('../src/platform');
 const { quietLog } = require('./mock-sonos');
+const { setLanguage } = require('../src/i18n');
+
+// Written in Danish, like the engine tests. Pinned so they do not depend on
+// what the machine's locale makes the default resolve to.
+setLanguage('da');
 
 // ------------------------------------------------------------------ store
 
@@ -374,4 +379,43 @@ test('the mock household binds only to 127.0.0.1, on ports the OS picks', async 
   );
   // Nothing fixed: every port was handed out by the operating system.
   for (const player of household.players) assert.ok(player.port > 1024);
+});
+
+// ------------------------------------------------------- a house with no Sonos
+
+test('a household with nothing in it says so, rather than throwing', async () => {
+  // The very first thing anyone without Sonos hardware sees — a reviewer, or
+  // somebody whose network blocks multicast. It used to be a ReferenceError:
+  // the empty-handed branch tested a variable that had never existed, and no
+  // test covered it because every other test has a mock household answering.
+  const { SonosSystem } = require('../src/sonos/system');
+  const warnings = [];
+  const log = { ...quietLog, warn: (message) => warnings.push(String(message)) };
+
+  const system = new SonosSystem({
+    log,
+    // A port nothing is listening on, so describe() fails the honest way.
+    seedHosts: ['127.0.0.1:1'],
+    discoveryTimeout: 150,
+  });
+
+  const players = await system.discover({ force: true });
+
+  assert.deepEqual(players, [], 'no speakers, no exception');
+  assert.equal(system.ready, false);
+  assert.equal(warnings.length, 1, `expected one warning, got: ${warnings.join(' | ')}`);
+  assert.match(warnings[0], /playerIps/, 'and it must say how to fix it');
+  // The address it could not reach, named — silence here was the old bug's twin.
+  assert.match(warnings[0], /127\.0\.0\.1/);
+  assert.doesNotMatch(warnings[0], /is not defined|undefined/i);
+});
+
+test('a household with no seeds at all is the same, quiet, story', async () => {
+  const { SonosSystem } = require('../src/sonos/system');
+  const warnings = [];
+  const log = { ...quietLog, warn: (message) => warnings.push(String(message)) };
+
+  const system = new SonosSystem({ log, seedHosts: [], discoveryTimeout: 150 });
+  assert.deepEqual(await system.discover({ force: true }), []);
+  assert.equal(warnings.length, 1);
 });

@@ -226,7 +226,11 @@ function sendSoap({ host, service, action, args = {}, timeout = DEFAULT_TIMEOUT,
 
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
-      reject(Object.assign(new SonosError('Afbrudt', { host, service, action }), { aborted: true }));
+      reject(
+        Object.assign(new SonosError(t('sonos.aborted'), { host, service, action }), {
+          aborted: true,
+        }),
+      );
       return;
     }
     let settled = false;
@@ -255,13 +259,18 @@ function sendSoap({ host, service, action, args = {}, timeout = DEFAULT_TIMEOUT,
           if (!cleanup()) return;
           reject(
             new SonosError(
-              `${service}.${action} mistede forbindelsen til ${host}${error?.message ? `: ${error.message}` : ''}`,
+              t('sonos.lostConnection', {
+                service,
+                action,
+                host,
+                detail: error?.message ? `: ${error.message}` : '',
+              }),
               { host, service, action },
             ),
           );
         };
         response.on('error', onBroken);
-        response.on('aborted', () => onBroken(new Error('svaret blev afbrudt')));
+        response.on('aborted', () => onBroken(new Error(t('sonos.replyAborted'))));
 
         response.on('end', () => {
           if (settled) return;
@@ -294,7 +303,11 @@ function sendSoap({ host, service, action, args = {}, timeout = DEFAULT_TIMEOUT,
     const onAbort = () => {
       request.destroy();
       cleanup();
-      reject(Object.assign(new SonosError('Afbrudt', { host, service, action }), { aborted: true }));
+      reject(
+        Object.assign(new SonosError(t('sonos.aborted'), { host, service, action }), {
+          aborted: true,
+        }),
+      );
     };
     const cleanup = () => {
       if (settled) return false;
@@ -349,6 +362,15 @@ function httpGet(host, path, timeout = 5000, port = SONOS_PORT) {
       (response) => {
         const chunks = [];
         response.on('data', (chunk) => chunks.push(chunk));
+        // Same reason as sendSoap: a player that reboots mid-reply closes the
+        // socket without an `end`, and waiting out the full timeout for an
+        // answer that is never coming makes discovery feel broken.
+        const onBroken = (error) => {
+          clearTimeout(timer);
+          reject(new Error(`GET ${path} on ${host} ${error.message}`));
+        };
+        response.on('error', onBroken);
+        response.on('aborted', () => onBroken(new Error('was cut short')));
         response.on('end', () => {
           clearTimeout(timer);
           if (response.statusCode !== 200) {

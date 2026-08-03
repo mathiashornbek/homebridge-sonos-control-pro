@@ -33,6 +33,13 @@ module.exports = {
   'log.noPlayers':
     'No Sonos speakers answered. If your network blocks multicast, put their IP addresses in config.json under "playerIps".',
   'log.discoveryFailed': 'Sonos discovery failed: {message}',
+  'log.noPlayersAnswered':
+    'No Sonos speaker answered at {hosts}. Check the addresses in config.json under "playerIps", and that the speakers are powered on.',
+  'log.controlApiError': 'The local control API ran into a problem: {message}',
+  'log.stopFailed': 'Something went wrong shutting down: {message}',
+  'sonos.aborted': 'Cancelled',
+  'sonos.lostConnection': '{service}.{action} lost the connection to {host}{detail}',
+  'sonos.replyAborted': 'the reply was cut short',
   'log.newPlayers': 'New Sonos speaker found: {names}',
   'log.newPlayersMany': 'New Sonos speakers found: {names}',
   'log.accessoryAdded': '＋ Added the switch "{name}" to Apple Home',

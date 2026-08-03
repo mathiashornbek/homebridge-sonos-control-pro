@@ -97,9 +97,14 @@ test('resolveLanguage takes an explicit code, then the environment, then English
   assert.equal(resolveLanguage('en', {}), 'en');
   assert.equal(resolveLanguage('auto', { LANG: 'da_DK.UTF-8' }), 'da');
   assert.equal(resolveLanguage('auto', { LC_ALL: 'da_DK.UTF-8', LANG: 'en_GB' }), 'da');
-  assert.equal(resolveLanguage(undefined, {}), 'da', 'no setting keeps the house language');
-  assert.equal(resolveLanguage('', {}), 'da');
-  assert.equal(resolveLanguage('sv', {}), 'da', 'an unknown code falls back rather than crashing');
+  assert.equal(resolveLanguage(undefined, {}), 'en', 'no setting behaves like auto');
+  assert.equal(resolveLanguage('', {}), 'en');
+  assert.equal(
+    resolveLanguage(undefined, { LANG: 'da_DK.UTF-8' }),
+    'da',
+    'no setting still follows a Danish machine',
+  );
+  assert.equal(resolveLanguage('sv', {}), 'en', 'an unknown code falls back rather than crashing');
   // A locale we do not speak falls through to whatever the machine reports;
   // both answers are legitimate, a crash or a raw key is not.
   assert.ok(['da', 'en'].includes(resolveLanguage('auto', { LANG: 'de_DE.UTF-8' })));
@@ -242,8 +247,10 @@ test('no Danish is left hard-coded anywhere the user can see it', async () => {
   // catch most of it, and a short list of words that cannot be English catches
   // the rest ("Ny scene", "Fejl 500" — both of which slipped through once).
   const danishLetters = /['"`][^'"`]*[æøåÆØÅ]/;
+  // The word list earns its keep: three Danish strings sat in soap.js for
+  // months because none of them happened to contain æ, ø or å.
   const danishWords =
-    /['"`][^'"`]*\b(fejl|kunne|findes|vælg|ingen|indeholder|gemt|slettet|hentet|scener|scene[nr]|handling|trin|ny scene)\b/i;
+    /['"`][^'"`]*\b(fejl|kunne|findes|vælg|ingen|indeholder|gemt|slettet|hentet|scener|scene[nr]|handling|trin|ny scene|afbrudt|mistede|forbindelsen?|svaret|blev|hvis|ikke|indstillinger)\b/i;
 
   // The dictionaries are the point, and the preset holds the user's own room
   // and scene names.

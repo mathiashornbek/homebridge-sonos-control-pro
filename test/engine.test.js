@@ -12,8 +12,14 @@ const { SceneRunner } = require('../src/engine/runner');
 const { SceneStore } = require('../src/store');
 const { resolveTargets } = require('../src/engine/targets');
 const fixture = require('./fixtures/household');
+const { setLanguage } = require('../src/i18n');
 
 const ROOMS = fixture.ROOMS;
+
+// These tests read the engine's own words back, and they were written in
+// Danish. Pin it, so they assert what they mean rather than whatever the
+// machine's locale happens to make the default resolve to.
+setLanguage('da');
 
 /** Spin up a household, a system pointed at it, a store and a runner. */
 async function harness({ scenes = fixture.SCENES, fast = true } = {}) {
@@ -1503,7 +1509,18 @@ test('two hundred random presses leave a consistent household and no leaks', asy
   }
 
   const results = await Promise.all(inFlight);
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  // Longer than the 750 ms a cached topology is allowed to be trusted for.
+  //
+  // The chaos loop regroups the mock speakers behind the plugin's back, which
+  // is what somebody regrouping in the Sonos app looks like from here. The
+  // plugin books its *own* grouping changes exactly and re-reads the topology
+  // before a music scene only if the last read is over 750 ms old — one round
+  // trip saved on every press, at the price of a sub-second window where an
+  // outside change is not yet known. That trade is deliberate. Settling for
+  // less than the window made the final press occasionally compute its joins
+  // from a model the test itself had invalidated, and skip them as already in
+  // place: a flake in the test, not a fault in the plugin.
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   assert.deepEqual(rejections, [], 'no unhandled promise rejections');
   assert.equal(h.runner.running.size, 0, 'no run left registered');

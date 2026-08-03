@@ -12,11 +12,9 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/v/homebridge-sonos-control-pro?color=4f46e5&label=npm" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?color=4f46e5" alt="downloads" /></a>
-  <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/homebridge-sonos-control-pro?color=4f46e5" alt="MIT licence" /></a>
+  <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/badge/licence-MIT-4f46e5" alt="MIT licence" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 and 2.x" />
-  <img src="https://img.shields.io/badge/tests-124%20%2B%20100-4f46e5" alt="124 unit tests, 100 browser checks" />
-  <img src="https://img.shields.io/badge/cloud-free-16a34a" alt="No cloud" />
-  <img src="https://img.shields.io/badge/🇬🇧%20%2F%20🇩🇰-bilingual-4f46e5" alt="English and Danish" />
+  <img src="https://img.shields.io/badge/tests-126%20%2B%20100-4f46e5" alt="126 unit tests, 100 browser checks" />
 </p>
 
 ---
@@ -303,7 +301,7 @@ The settings page shows two fields on purpose. These are still read from `config
 Issues and pull requests are very welcome. The test suite is the contract:
 
 ```bash
-npm test        # 124 unit and integration tests against a full mock Sonos household
+npm test        # 126 unit and integration tests against a full mock Sonos household
 npm run test:ui # 100 checks driving the real settings UI in Chromium
 ```
 

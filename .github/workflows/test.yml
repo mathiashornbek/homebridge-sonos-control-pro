@@ -1,0 +1,62 @@
+name: Tests
+
+# The verification criteria ask that the plugin runs on every supported LTS
+# release of Node. This proves it on every push, rather than on the author's
+# word — and pins the two versions Homebridge itself supports.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # The only runtime dependency is @homebridge/plugin-ui-utils, and the
+      # unit tests need nothing at all — they run against a mock household
+      # written by hand. Install anyway, so a broken manifest fails here.
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Syntax check
+        run: npm run lint
+
+      - name: Unit and integration tests
+        run: npm test
+
+  ui:
+    name: Settings UI (Chromium)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Browser checks
+        run: npm run test:ui

@@ -76,6 +76,15 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
         (response) => {
           const chunks = [];
           response.on('data', (chunk) => chunks.push(chunk));
+          // If the plugin restarts mid-reply the socket closes without an
+          // `end`. Answer the settings page straight away rather than leaving
+          // it spinning until the timeout.
+          const onBroken = () => {
+            clearTimeout(timer);
+            resolve(null);
+          };
+          response.on('error', onBroken);
+          response.on('aborted', onBroken);
           response.on('end', () => {
             clearTimeout(timer);
             const text = Buffer.concat(chunks).toString('utf8');

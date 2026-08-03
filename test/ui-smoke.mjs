@@ -66,6 +66,11 @@ function unconfigured() {
   return ROOMS.filter((name) => !known.has(name));
 }
 
+// These checks read the interface's own words back, and they were written in
+// Danish. Pin it: the plugin's default is now "follow the machine", and the
+// machine running the suite is usually English.
+setLanguage('da');
+
 const bootstrapPayload = (language) => {
   // undefined means "whatever we are already speaking" — the players poll must
   // not quietly reset the language mid-run.
@@ -262,7 +267,12 @@ await page.exposeFunction('__call', (payload) => {
 
 await page.addInitScript(() => {
   // The plugin config the UI reads and writes, exactly as Homebridge exposes it.
-  window.__config = [{ platform: 'SonosControlPro', name: 'Sonos Control Pro' }];
+  // Danish on purpose: these checks read the interface's words back, and they
+  // are written in Danish. An unconfigured install follows the machine, which
+  // on the machines this suite runs on means English.
+  window.__config = [
+    { platform: 'SonosControlPro', name: 'Sonos Control Pro', language: 'da' },
+  ];
   window.homebridge = {
     request: async (route, body) =>
       route === '/bootstrap' ? window.__bootstrap(body?.language) : window.__call(body),

@@ -62,8 +62,15 @@ class SonosControlPlatform {
       });
     });
 
+    // Six teardown calls, any of which could throw on a half-started plugin.
+    // A shutdown handler that throws takes the whole bridge down with it, and
+    // there is nothing left to save by then anyway.
     this.api.on('shutdown', () => {
-      this.stop();
+      try {
+        this.stop();
+      } catch (error) {
+        this.log.warn(t('log.stopFailed', { message: error.message || String(error) }));
+      }
     });
   }
 

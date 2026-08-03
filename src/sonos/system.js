@@ -279,11 +279,12 @@ class SonosSystem extends EventEmitter {
       if (!seed) {
         this.ready = false;
         this.lastDiscoveryAt = Date.now();
-        if (hosts.size === 0) {
-          this.log.warn(
-            'No Sonos players answered discovery. If your network blocks multicast, add their IP addresses under Settings → Manual player IPs.',
-          );
-        }
+        // Two different silences, and telling them apart is the whole value of
+        // the message: nothing on the network answered at all, or the addresses
+        // we were handed did not answer. The second case used to say nothing —
+        // and the first threw a ReferenceError instead of the sentence below.
+        const hosts = [...targets.values()].map((target) => target.host).join(', ');
+        this.log.warn(hosts ? t('log.noPlayersAnswered', { hosts }) : t('log.noPlayers'));
         return [];
       }
 

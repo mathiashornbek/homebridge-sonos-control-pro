@@ -19,7 +19,7 @@
       "language": {
         "title": "Sprog / Language",
         "type": "string",
-        "default": "da",
+        "default": "auto",
         "oneOf": [
           {
             "title": "Følg systemet / Follow the system",

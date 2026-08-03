@@ -15,7 +15,7 @@ const en = require('./en');
  */
 
 const LANGUAGES = { da, en };
-const DEFAULT_LANGUAGE = 'da';
+const DEFAULT_LANGUAGE = 'en';
 
 /** The languages a user can pick, in the order the picker shows them. */
 const AVAILABLE = [
@@ -29,10 +29,10 @@ const AVAILABLE = [
  *
  * Three cases, deliberately distinct:
  *
- *   nothing set   the house language — Danish. An existing install that has
- *                 never seen this setting keeps speaking exactly as it did.
- *   'auto'        follow the machine's locale, English when it says nothing
- *                 recognisable. You get this only by asking for it.
+ *   nothing set   follow the machine's locale, the same as 'auto'. Somebody
+ *                 who has never opened the settings gets their own language
+ *                 where we have it, and English where we do not.
+ *   'auto'        the same thing, asked for explicitly.
  *   'da' / 'en'   precisely that.
  *
  * @param {string} [configured]
@@ -41,8 +41,7 @@ const AVAILABLE = [
  */
 function resolveLanguage(configured, env = process.env) {
   if (configured && LANGUAGES[configured]) return configured;
-  if (!configured) return DEFAULT_LANGUAGE;
-  if (configured !== 'auto') {
+  if (configured && configured !== 'auto') {
     // An unknown code is a typo, not a request for a language we do not have.
     return DEFAULT_LANGUAGE;
   }
