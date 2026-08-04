@@ -10,14 +10,21 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/homebridge/homebridge/wiki/Verified-Plugins"><img src="https://img.shields.io/badge/homebridge-verified-blueviolet?color=%23491F59&style=flat" alt="Verificeret af Homebridge" /></a>
-  <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/v/homebridge-sonos-control-pro?color=4f46e5&label=npm" alt="npm-version" /></a>
-  <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?color=4f46e5" alt="downloads" /></a>
-  <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/badge/licens-MIT-4f46e5" alt="MIT-licens" /></a>
-  <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 og 2.x" />
-  <img src="https://img.shields.io/badge/Node-22%20%7C%2024%20%7C%2026-4f46e5" alt="Node 22, 24 og 26" />
-  <img src="https://img.shields.io/badge/tests-190%20%2B%20114-4f46e5" alt="190 tests, 114 browserkontroller" />
-  <a href="https://www.paypal.com/paypalme/MathiasHornbek"><img src="https://img.shields.io/badge/PayPal-buy%20me%20a%20coffee-00457C?logo=paypal&logoColor=white&style=flat" alt="Støt pluginnet på PayPal" /></a>
+  <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/v/homebridge-sonos-control-pro?label=npm&color=cb3837" alt="npm-version"></a>
+  <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?label=downloads&color=8a5cf5" alt="downloads"></a>
+  <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/actions"><img src="https://img.shields.io/github/actions/workflow/status/mathiashornbek/homebridge-sonos-control-pro/test.yml?label=CI" alt="CI-status"></a>
+  <img src="https://img.shields.io/badge/node-22%20%7C%2024%20%7C%2026-brightgreen" alt="Node 22, 24 og 26">
+  <img src="https://img.shields.io/badge/homebridge-1.8%20%7C%202.x-purple" alt="Homebridge 1.8 og 2.x">
+  <img src="https://img.shields.io/badge/tests-190%20%2B%20114-orange" alt="190 tests, 114 browserkontroller">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT-licens"></a>
+</p>
+
+<p align="center">
+  <a href="https://paypal.me/MathiasHornbek"><img src="https://img.shields.io/badge/PayPal-Donate-00457C?logo=paypal&logoColor=white" alt="Støt via PayPal"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/homebridge/homebridge/wiki/Verified-Plugins"><img src="https://img.shields.io/badge/homebridge-verified-blueviolet?color=%23491F59&style=for-the-badge&logoColor=%23FFFFFF&logo=homebridge" alt="Verificeret af Homebridge"></a>
 </p>
 
 ---
@@ -322,6 +329,6 @@ Ikke tilknyttet, godkendt af eller sponsoreret af Sonos, Inc. "Sonos" er et vare
 
 <p align="center">
   <b>⭐ Har det gjort dit hus bedre, betyder en stjerne på GitHub meget.</b><br />
-  <b>☕ Og vil du give en kop kaffe: <a href="https://www.paypal.com/paypalme/MathiasHornbek">PayPal</a> · <a href="https://github.com/sponsors/mathiashornbek">GitHub Sponsors</a></b><br />
+  <b>☕ Og vil du give en kop kaffe: <a href="https://paypal.me/MathiasHornbek">PayPal</a> · <a href="https://github.com/sponsors/mathiashornbek">GitHub Sponsors</a></b><br />
   <b><a href="README.md">🇬🇧 English documentation →</a></b>
 </p>
