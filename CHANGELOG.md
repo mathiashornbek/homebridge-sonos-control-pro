@@ -8,6 +8,13 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.4.3
+
+- The donate button in the Homebridge UI pointed at GitHub Sponsors. It points
+  at PayPal now.
+
+---
+
 ## 3.4.2
 
 - **Verified by Homebridge.** The badge is in the README.

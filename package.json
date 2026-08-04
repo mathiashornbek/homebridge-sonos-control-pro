@@ -1,20 +1,14 @@
 {
   "name": "homebridge-sonos-control-pro",
   "displayName": "Sonos Control Pro",
-  "version": "3.4.2",
+  "version": "3.4.3",
   "description": "Sonos scenes as HomeKit switches, built and edited in a visual editor inside Homebridge. Local UPnP control — no cloud, no hub, no account.",
   "license": "MIT",
   "author": "Mathias Hornbek",
-  "funding": [
-    {
-      "type": "paypal",
-      "url": "https://paypal.me/MathiasHornbek"
-    },
-    {
-      "type": "github",
-      "url": "https://github.com/sponsors/mathiashornbek"
-    }
-  ],
+  "funding": {
+    "type": "paypal",
+    "url": "https://paypal.me/MathiasHornbek"
+  },
   "homepage": "https://github.com/mathiashornbek/homebridge-sonos-control-pro#readme",
   "repository": {
     "type": "git",
