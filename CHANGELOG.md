@@ -8,6 +8,15 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.4.4
+
+- A test waited a fixed 50 ms for a write it could have waited *for*, and failed
+  on a loaded CI runner. The store now keeps the promise for the write that
+  `load()` starts on its own, so the test awaits it instead of guessing.
+- CI runs on current versions of `actions/checkout` and `actions/setup-node`.
+
+---
+
 ## 3.4.3
 
 - The donate button in the Homebridge UI pointed at GitHub Sponsors. It points

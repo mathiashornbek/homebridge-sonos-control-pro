@@ -224,6 +224,12 @@ class SceneStore extends EventEmitter {
     this.degraded = false;
     /** The last backup failure, so it can be reported rather than swallowed. */
     this.lastBackupError = null;
+    /**
+     * A write that load() started on its own — repairing a duplicate id, say.
+     * Held so a caller can await it; nothing has to.
+     * @type {Promise<unknown>|null}
+     */
+    this.pendingSave = null;
     this._watcher = null;
     this._reloadTimer = null;
     this._lastWriteAt = 0;
@@ -320,7 +326,11 @@ class SceneStore extends EventEmitter {
         // Home deleted and recreated that switch on every restart, and its room
         // and its automations went with it each time.
         this._idsReassigned = false;
-        this.save().catch((error) => this.log.warn(t('log.saveFailed', { message: error.message })));
+        // Kept rather than dropped, so anything that needs to know the write
+        // finished can wait for it instead of guessing at a delay.
+        this.pendingSave = this.save().catch((error) =>
+          this.log.warn(t('log.saveFailed', { message: error.message })),
+        );
       }
       return this.list();
     } catch (error) {

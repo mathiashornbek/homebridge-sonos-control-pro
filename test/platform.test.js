@@ -907,8 +907,11 @@ test('a duplicate id is written back once instead of changing on every restart',
 
   // Loading is all it takes: the new id has to reach the file by itself, or the
   // duplicate stays there and is resolved differently on every restart.
+  // Awaited, not slept through. A fixed delay here is a guess about how fast
+  // the machine is, and on a CI runner building four Node versions at once the
+  // guess was wrong often enough to fail a build for no reason.
   store.load();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await store.pendingSave;
   const first = store.list().map((scene) => scene.id);
 
   const reopened = new SceneStore({ storagePath: dir, log: quietLog });
