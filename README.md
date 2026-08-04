@@ -10,12 +10,14 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/homebridge/homebridge/wiki/Verified-Plugins"><img src="https://img.shields.io/badge/homebridge-verified-blueviolet?color=%23491F59&style=flat" alt="Verified by Homebridge" /></a>
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/v/homebridge-sonos-control-pro?color=4f46e5&label=npm" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/homebridge-sonos-control-pro"><img src="https://img.shields.io/npm/dt/homebridge-sonos-control-pro?color=4f46e5" alt="downloads" /></a>
   <a href="https://github.com/mathiashornbek/homebridge-sonos-control-pro/blob/main/LICENSE"><img src="https://img.shields.io/badge/licence-MIT-4f46e5" alt="MIT licence" /></a>
   <img src="https://img.shields.io/badge/Homebridge-1.8%20%7C%202.x-4f46e5" alt="Homebridge 1.8 and 2.x" />
   <img src="https://img.shields.io/badge/Node-22%20%7C%2024%20%7C%2026-4f46e5" alt="Node 22, 24 and 26" />
   <img src="https://img.shields.io/badge/tests-190%20%2B%20114-4f46e5" alt="190 unit tests, 114 browser checks" />
+  <a href="https://www.paypal.com/paypalme/MathiasHornbek"><img src="https://img.shields.io/badge/PayPal-buy%20me%20a%20coffee-00457C?logo=paypal&logoColor=white&style=flat" alt="Support the plugin on PayPal" /></a>
 </p>
 
 ---
@@ -320,5 +322,6 @@ Not affiliated with, endorsed by or sponsored by Sonos, Inc. "Sonos" is a tradem
 
 <p align="center">
   <b>⭐ If this made your house better, a star on GitHub means a lot.</b><br />
+  <b>☕ And if you want to buy me a coffee: <a href="https://www.paypal.com/paypalme/MathiasHornbek">PayPal</a> · <a href="https://github.com/sponsors/mathiashornbek">GitHub Sponsors</a></b><br />
   <b><a href="README.da.md">🇩🇰 Dansk dokumentation →</a></b>
 </p>

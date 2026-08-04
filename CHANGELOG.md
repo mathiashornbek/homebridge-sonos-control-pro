@@ -8,6 +8,12 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.4.2
+
+- **Verified by Homebridge.** The badge is in the README.
+
+---
+
 ## 3.4.1
 
 - The icon in the settings page was missing the SONOS text under the mark. It
