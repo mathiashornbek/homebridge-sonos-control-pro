@@ -360,7 +360,10 @@ module.exports = {
   // ── how the scenes present themselves in Apple Home
   'model.momentary': 'Scene (press)',
   'model.stateful': 'Scene (on/off)',
-  'scene.copySuffix': '{name} (copy)',
+  'scene.copySuffix': '{name} - copy',
+  // HomeKit wants a name that starts and ends with a letter or a number. This
+  // is what a scene is called there when nothing of the user's own can be used.
+  'scene.homekitFallback': 'Sonos scene',
   'scene.defaultName': 'Scene {number}',
   'trigger.homekit': 'HomeKit',
   'trigger.ui': 'Settings',

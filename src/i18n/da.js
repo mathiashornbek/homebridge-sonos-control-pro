@@ -362,7 +362,10 @@ module.exports = {
   // ── som scenerne præsenterer sig i Apple Home
   'model.momentary': 'Scene (tryk)',
   'model.stateful': 'Scene (til/fra)',
-  'scene.copySuffix': '{name} (kopi)',
+  'scene.copySuffix': '{name} - kopi',
+  // HomeKit vil have et navn der starter og slutter på et bogstav eller tal.
+  // Dette er det navn en scene får dér, hvis intet af brugerens eget kan bruges.
+  'scene.homekitFallback': 'Sonos-scene',
   'scene.defaultName': 'Scene {number}',
   'trigger.homekit': 'HomeKit',
   'trigger.ui': 'Indstillinger',

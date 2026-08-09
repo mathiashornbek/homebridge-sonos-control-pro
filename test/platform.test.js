@@ -17,6 +17,16 @@ const { setLanguage } = require('../src/i18n');
 // what the machine's locale makes the default resolve to.
 setLanguage('da');
 
+/**
+ * The expression Homebridge checks every accessory and service name against,
+ * from `@homebridge/hap-nodejs`, `lib/util/checkName.js`. Kept here so the
+ * names this plugin generates are tested against the real rule rather than
+ * against one written from memory. A name that fails it is not refused — the
+ * Home app may simply decline to add the accessory, or show it as
+ * unresponsive, with only a line in the log to say why.
+ */
+const HAP_NAME_RULE = /^[\p{L}\p{N}][\p{L}\p{N}\p{Zs}’'&!._:;()/,-]*[\p{L}\p{N}]$/u;
+
 // ------------------------------------------------------------------ store
 
 test('the store normalises whatever it is handed', () => {
@@ -133,7 +143,8 @@ test('duplicating a scene gives every step a fresh id', () => {
   const source = store.list()[0];
   const copy = store.duplicate(source.id);
 
-  assert.equal(copy.name, 'Kilde (kopi)');
+  assert.equal(copy.name, 'Kilde - kopi');
+  assert.match(copy.name, HAP_NAME_RULE, 'and HomeKit will take it');
   assert.notEqual(copy.id, source.id);
   assert.notEqual(copy.steps[0].id, source.steps[0].id);
   assert.equal(copy.steps.length, 2);
@@ -175,9 +186,14 @@ function fakeHomebridge(storagePath) {
     getService(type) {
       return this.services.get(type) || null;
     }
-    addService(type) {
+    addService(type, displayName) {
       const service = {
         type,
+        // A real HAP service carries its own name, given when it is created and
+        // written into Homebridge's accessory cache — and it is that name
+        // Homebridge validates when it reads the cache back. Modelled here
+        // because leaving it out is exactly what hid the bug.
+        displayName,
         characteristics: new Map(),
         handlers: new Map(),
         setCharacteristic(name, value) {
@@ -1230,6 +1246,125 @@ test('a rename tells Homebridge to write its accessory cache', async (t) => {
 
   assert.equal(updated.length, 1);
   assert.equal(updated[0].displayName, 'Aftenmusik');
+});
+
+// ------------------------------------------------------ names HomeKit takes
+
+// The name a scene is given the day it is made was written into Homebridge's
+// accessory cache and never touched again: renaming the scene updated the
+// accessory and the characteristic, but not the service's own name — and it is
+// that one Homebridge reads back and validates. A scene duplicated and then
+// renamed kept warning about a name that had not existed for months.
+test('renaming a scene renames the service too, not just the accessory', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-plat-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const api = fakeHomebridge(dir);
+  const updated = [];
+  api.updatePlatformAccessories = (accessories) => updated.push(...accessories);
+  const platform = new SonosControlPlatform(quietLog, {}, api);
+  t.after(() => platform.stop());
+
+  platform.store.replaceAll([{ name: 'Aften' }]);
+  platform.syncAccessories();
+  const scene = platform.store.list()[0];
+  const accessory = [...platform.cachedAccessories.values()][0];
+  assert.equal(accessory.getService('Switch').displayName, 'Aften');
+
+  platform.store.upsert({ ...scene, name: 'Aftenmusik' });
+  platform.syncAccessories();
+
+  assert.equal(accessory.getService('Switch').displayName, 'Aftenmusik');
+  assert.equal(accessory.getService('Switch').characteristics.get('Name'), 'Aftenmusik');
+  assert.equal(updated.length, 1, 'and the cache is told, or the old name comes back');
+});
+
+// The same thing seen from a restart: the accessory name in the cache is
+// already right, and only the service name is stale. Comparing the accessory
+// name alone found nothing to do, so the cache was never rewritten and the
+// warning came back every single time.
+test('a stale name left in the cache is repaired, and written back', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-plat-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const api = fakeHomebridge(dir);
+  const platform = new SonosControlPlatform(quietLog, {}, api);
+  t.after(() => platform.stop());
+
+  platform.store.replaceAll([{ name: 'Bad - DR P3' }]);
+  platform.syncAccessories();
+  const accessory = [...platform.cachedAccessories.values()][0];
+
+  // What Homebridge would hand back from disk: the accessory renamed, the
+  // service still carrying the name it was created with.
+  accessory.getService('Switch').displayName = 'Afspil DR P3 (kopi)';
+  platform.handlers.clear();
+
+  const updated = [];
+  api.updatePlatformAccessories = (accessories) => updated.push(...accessories);
+  platform.syncAccessories();
+
+  assert.equal(accessory.getService('Switch').displayName, 'Bad - DR P3');
+  assert.equal(updated.length, 1, 'the corrected name has to reach the cache');
+});
+
+test('a duplicated scene is given a name HomeKit will take', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+
+  store.replaceAll([{ name: 'Afspil DR P3' }]);
+  const copy = store.duplicate(store.list()[0].id);
+
+  // "Afspil DR P3 (kopi)" ends in a bracket, and a name has to end with a
+  // letter or a number. Every duplicate anyone ever made was refused.
+  assert.match(copy.name, HAP_NAME_RULE);
+  assert.ok(copy.name.includes('Afspil DR P3'), 'and still says what it is a copy of');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('a name HomeKit would refuse is made acceptable, without changing the scene', () => {
+  const { homekitName } = require('../src/accessory');
+
+  // Left exactly as written, because there is nothing wrong with them.
+  for (const name of ['Aften', 'Bad - DR P3', 'Skru op 5%'.replace('%', ''), "Rose's værelse", 'Musik (aften) er godt', 'Stue 1. Sal']) {
+    assert.equal(homekitName(name), name, name);
+    assert.match(homekitName(name), HAP_NAME_RULE, name);
+  }
+
+  // Trailing punctuation is the common way to fail: it is allowed in the
+  // middle of a name but cannot end one.
+  assert.equal(homekitName('Godnat!'), 'Godnat');
+  assert.equal(homekitName('Er du klar?'), 'Er du klar');
+  // A bracket left hanging open reads worse than no bracket at all.
+  assert.equal(homekitName('Afspil DR P3 (kopi)'), 'Afspil DR P3 kopi');
+  // Emoji are dropped, and the words on either side do not run together.
+  assert.equal(homekitName('Lummer 🔥 stemning'), 'Lummer stemning');
+  assert.equal(homekitName('  Aften  '), 'Aften');
+  // Nothing usable left: something has to be shown, and it has to be legal.
+  assert.match(homekitName('🔥🔥'), HAP_NAME_RULE);
+  assert.match(homekitName(''), HAP_NAME_RULE);
+
+  for (const name of ['Godnat!', 'Er du klar?', 'Afspil DR P3 (kopi)', 'Lummer 🔥 stemning', '🔥🔥', '']) {
+    assert.match(homekitName(name), HAP_NAME_RULE, name);
+  }
+});
+
+test('the scene the user sees keeps the name they typed', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-plat-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const api = fakeHomebridge(dir);
+  const platform = new SonosControlPlatform(quietLog, {}, api);
+  t.after(() => platform.stop());
+
+  platform.store.replaceAll([{ name: 'Godnat!' }]);
+  platform.syncAccessories();
+
+  assert.equal(platform.store.list()[0].name, 'Godnat!', 'their name, untouched');
+  const accessory = [...platform.cachedAccessories.values()][0];
+  assert.equal(accessory.displayName, 'Godnat', 'and a name HomeKit will take');
 });
 
 test('adopting a speaker with a level missing changes nothing at all', async (t) => {

@@ -8,6 +8,29 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.5.1
+
+- **A renamed scene kept warning about the name it used to have.** A HAP service
+  carries its own name, separate from the accessory and from the characteristic,
+  and it was set once — when the service was created. Renaming a scene updated
+  the other two and left this one behind. Because it is written into
+  Homebridge's accessory cache, and it is the one Homebridge validates when it
+  reads that cache back, the name a scene was born with came back at every
+  restart, months after it had been renamed. It is set on every sync now, and
+  the cache is rewritten when it changes — so a name that is already stale is
+  repaired by starting once.
+- **A duplicated scene was given a name HomeKit refuses.** "X (kopi)" ends in a
+  bracket, and Apple wants a name to end with a letter or a number. Copies are
+  called "X - kopi" now.
+- **And any name that would be refused is adjusted before HomeKit sees it.**
+  "Godnat!" is a reasonable thing to call a scene; it is also invalid, because
+  punctuation is allowed inside a name but cannot end one. The scene keeps the
+  name you typed everywhere you can see it — the editor, the list, the log — and
+  HomeKit is handed one it will accept. Homebridge only warns about these, so a
+  switch that never appeared in the Home app gave no other sign.
+
+---
+
 ## 3.5.0
 
 - **"New Sonos speakers found" every five minutes, naming the same speakers.**

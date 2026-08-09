@@ -321,7 +321,7 @@ class SonosControlPlatform {
     for (const [uuid, scene] of wanted) {
       const cached = this.cachedAccessories.get(uuid);
       if (cached) {
-        const previousName = cached.displayName;
+        const before = this._nameFingerprint(cached);
         cached.context.scene = { id: scene.id, name: scene.name };
         const handler = this.handlers.get(scene.id);
         if (handler) handler.update(scene);
@@ -329,7 +329,7 @@ class SonosControlPlatform {
         // Homebridge writes its accessory cache only when it is told to. A
         // rename made purely in memory was back to the old name after the next
         // restart — in the log, in the Homebridge UI, and for Siri.
-        if (cached.displayName !== previousName) toUpdate.push(cached);
+        if (this._nameFingerprint(cached) !== before) toUpdate.push(cached);
         continue;
       }
       const accessory = new this.api.platformAccessory(scene.name, uuid);
@@ -389,6 +389,25 @@ class SonosControlPlatform {
         this.log.debug?.(t('log.accessoryAddFailed', { message: error.message || String(error) }));
       }
     }
+  }
+
+  /**
+   * Every name HomeKit will be shown for this accessory, as one string.
+   *
+   * There are two, and only comparing the first missed the one that mattered.
+   * The accessory carries a name and so does the switch service inside it, and
+   * both are written into Homebridge's accessory cache — but it is the
+   * service's that Homebridge validates when it reads that cache back. A scene
+   * renamed after it was created kept the service name it was born with, and
+   * because the accessory name *had* been updated, nothing here noticed a
+   * change and the cache was never rewritten. The old name came back at every
+   * restart, for as long as the scene existed.
+   *
+   * @private
+   */
+  _nameFingerprint(accessory) {
+    const service = accessory.getService?.(this.api.hap.Service.Switch);
+    return `${accessory.displayName} ${service?.displayName ?? ''}`;
   }
 
   /** Execution context for one-off step tests from the settings UI. */

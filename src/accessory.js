@@ -3,6 +3,56 @@
 const { t } = require('./i18n');
 
 /**
+ * The rule Apple applies to a name, as Homebridge checks it.
+ *
+ * Copied from `@homebridge/hap-nodejs`, `lib/util/checkName.js`: the name has
+ * to begin and end with a letter or a number, and only the characters in the
+ * middle class are allowed in between. Note that brackets are permitted inside
+ * a name but cannot end one.
+ *
+ * A name that fails is not refused outright, which would at least be visible.
+ * Homebridge writes a warning to the log and carries on, and the Home app may
+ * then decline to add the accessory or show it as unresponsive.
+ */
+const HOMEKIT_NAME = /^[\p{L}\p{N}][\p{L}\p{N}\p{Zs}’'&!._:;()/,-]*[\p{L}\p{N}]$/u;
+const HOMEKIT_DISALLOWED = /[^\p{L}\p{N}\p{Zs}’'&!._:;()/,-]/gu;
+const HOMEKIT_EDGES = /^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu;
+
+/**
+ * The name to hand HomeKit for a scene.
+ *
+ * The user's own name is left exactly as they typed it everywhere they can see
+ * it — the editor, the scene list, the log. This is only what goes to HomeKit,
+ * and only when what they typed would not be accepted.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function homekitName(name) {
+  const wanted = String(name ?? '').trim();
+  if (HOMEKIT_NAME.test(wanted)) return wanted;
+
+  const cleaned = wanted
+    // A space rather than nothing, so removing an emoji between two words does
+    // not run them together.
+    .replace(HOMEKIT_DISALLOWED, ' ')
+    // Brackets are allowed in the middle but cannot end a name, and trimming
+    // only the closing one leaves the opening one hanging: "Musik (aften"
+    // reads worse than "Musik aften". They go together or not at all. Names
+    // that are already acceptable never reach this line, so a bracket the user
+    // can live with is left alone.
+    .replace(/[()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(HOMEKIT_EDGES, '')
+    .trim();
+
+  // A single character satisfies Apple's intent but not the expression, which
+  // wants a first *and* a last one. Nothing can be done about that short of
+  // inventing a character, so it is left as written.
+  return cleaned || t('scene.homekitFallback');
+}
+
+/**
  * One HomeKit switch per scene.
  *
  * Momentary switches flip themselves back off once the scene has been kicked
@@ -31,7 +81,8 @@ class SceneSwitch {
     // accessory's context across restarts, so that is where the answer belongs.
     this.state = scene.switchType === 'stateful' && accessory.context?.on === true;
     this._autoOffTimer = null;
-    accessory.displayName = scene.name;
+    const label = homekitName(scene.name);
+    accessory.displayName = label;
 
     const information =
       accessory.getService(Service.AccessoryInformation) ||
@@ -46,14 +97,22 @@ class SceneSwitch {
       .setCharacteristic(Characteristic.FirmwareRevision, platform.version);
 
     this.service =
-      accessory.getService(Service.Switch) || accessory.addService(Service.Switch, scene.name);
+      accessory.getService(Service.Switch) || accessory.addService(Service.Switch, label);
 
-    this.service.setCharacteristic(Characteristic.Name, scene.name);
+    // A service carries its own name, separate from the characteristic and from
+    // the accessory, and it is set once — when the service is created. Renaming
+    // a scene updated the other two and left this one behind, and because it is
+    // written into Homebridge's accessory cache, the name the scene had on the
+    // day it was made came back on every restart. That is what HomeKit was
+    // shown, and what it complained about, months after the scene had been
+    // renamed. Set it every time, not only at creation.
+    this.service.displayName = label;
+    this.service.setCharacteristic(Characteristic.Name, label);
     if (Characteristic.ConfiguredName) {
       if (!this.service.testCharacteristic(Characteristic.ConfiguredName)) {
         this.service.addOptionalCharacteristic(Characteristic.ConfiguredName);
       }
-      this.service.setCharacteristic(Characteristic.ConfiguredName, scene.name);
+      this.service.setCharacteristic(Characteristic.ConfiguredName, label);
     }
 
     this.service
@@ -67,11 +126,13 @@ class SceneSwitch {
     const previousName = this.scene.name;
     this.scene = scene;
     if (previousName !== scene.name) {
-      this.service.updateCharacteristic(this.Characteristic.Name, scene.name);
+      const label = homekitName(scene.name);
+      this.service.displayName = label;
+      this.service.updateCharacteristic(this.Characteristic.Name, label);
       if (this.Characteristic.ConfiguredName && this.service.testCharacteristic(this.Characteristic.ConfiguredName)) {
-        this.service.updateCharacteristic(this.Characteristic.ConfiguredName, scene.name);
+        this.service.updateCharacteristic(this.Characteristic.ConfiguredName, label);
       }
-      this.accessory.displayName = scene.name;
+      this.accessory.displayName = label;
     }
     const information = this.accessory.getService(this.platform.api.hap.Service.AccessoryInformation);
     information?.updateCharacteristic(
@@ -168,4 +229,4 @@ class SceneSwitch {
   }
 }
 
-module.exports = { SceneSwitch };
+module.exports = { SceneSwitch, homekitName, HOMEKIT_NAME };
