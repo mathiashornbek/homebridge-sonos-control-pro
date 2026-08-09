@@ -31,9 +31,36 @@ test('the store normalises whatever it is handed', () => {
   assert.equal(first.enabled, true);
   assert.equal(first.switchType, 'momentary');
   assert.equal(first.mode, 'parallel');
+  assert.equal(first.allowConcurrent, false);
   assert.deepEqual(first.condition, { type: 'always', params: {} });
   assert.deepEqual(first.steps, []);
   assert.equal(second.name, 'Scene 2');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// The runner reads this field to decide whether a scene may overlap another.
+// It used to be stripped on every save, so the editor could never have set it
+// and a hand-written scenes.json lost it on the first write back.
+test('a scene allowed to overlap keeps that permission across a save', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+
+  store.replaceAll([
+    { name: 'Må overlappe', allowConcurrent: true },
+    { name: 'Må ikke', allowConcurrent: 'ja tak' },
+  ]);
+  await store.save();
+
+  const reopened = new SceneStore({ storagePath: dir, log: quietLog });
+  reopened.load();
+  const [overlapping, other] = reopened.list();
+
+  assert.equal(overlapping.allowConcurrent, true);
+  // Anything that is not exactly `true` means no, rather than a truthy string
+  // quietly switching off the protection.
+  assert.equal(other.allowConcurrent, false);
 
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -747,6 +774,38 @@ test('an afternoon of identical saves does not push out last week', async () => 
       .join(','),
   );
   assert.ok(names.includes('Første'), 'and the state before the edit is still reachable');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// The name of a backup is the clock to the millisecond. Two saves that fall
+// inside the same one used to write the same name, and the newer copy replaced
+// the older — quietly throwing away the only state anyone would want back.
+test('two saves in the same millisecond keep two backups, not one', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-store-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+
+  const realNow = Date.now;
+  Date.now = () => 1_770_000_000_000;
+  try {
+    store.replaceAll([{ name: 'Første' }]);
+    await store.save();
+    store.replaceAll([{ name: 'Anden' }]);
+    await store.save();
+    store.replaceAll([{ name: 'Tredje' }]);
+    await store.save();
+  } finally {
+    Date.now = realNow;
+  }
+
+  const names = (await store.listBackups()).map((entry) =>
+    JSON.parse(fs.readFileSync(path.join(store.backupDir, entry.name), 'utf8'))
+      .scenes.map((scene) => scene.name)
+      .join(','),
+  );
+
+  assert.deepEqual(names.slice().sort(), ['Anden', 'Første'], 'both earlier states are still there');
 
   fs.rmSync(dir, { recursive: true, force: true });
 });

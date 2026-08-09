@@ -8,6 +8,33 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## Unreleased
+
+- **"Let this scene run alongside others" is a setting again.** The runner has
+  always read `allowConcurrent` to decide whether a scene may overlap another,
+  but the store rebuilt every scene without the field, so it was dropped on each
+  save and no scene could ever have it. It survives now, and the editor has a
+  checkbox for it.
+- **Two saves in the same millisecond kept one backup, not two.** The name of a
+  backup is the clock, and the second copy replaced the first — throwing away
+  the older state, which is the one worth keeping. The names step forward until
+  they are free.
+- **Deleting, duplicating, running or stopping a scene that is not there says
+  so.** These four read the id without looking at it: a request naming no scene
+  reported success having done nothing, and an id for a scene deleted in another
+  tab came back as a 500, which the settings page shows as "the bridge is
+  broken". They answer 400 and 404 now, on the bridge and in the offline
+  fallback alike.
+- **Escaping in the settings page is checked rather than remembered.** Every
+  value pasted into an HTML attribute now goes through `escapeHtml`, `num` or
+  `safeUrl` — and a test reads the file and fails, by line, on any that does
+  not.
+- `npm run test:ui` on a fresh checkout said `Cannot find package 'playwright'`.
+  It now explains that the browser checks need a tool that is deliberately not a
+  dependency, and how to fetch it.
+
+---
+
 ## 3.4.4
 
 - A test waited a fixed 50 ms for a write it could have waited *for*, and failed

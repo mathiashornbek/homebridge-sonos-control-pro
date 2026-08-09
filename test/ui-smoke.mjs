@@ -6,9 +6,38 @@
  * come from the plugin's own catalogue and preset — so the shapes are real.
  *
  * Run with:  node test/ui-smoke.mjs
+ *
+ * Playwright is not a dependency of this package. It brings a browser with it,
+ * which everyone installing the plugin would pay for and nobody but this file
+ * would use, so it is installed on the side — by CI, and by hand here. Asking
+ * for it up front turned a missing tool into `Cannot find package 'playwright'`
+ * on a fresh checkout, which reads like a broken test suite rather than a tool
+ * that has not been fetched yet.
  */
 
-import { chromium } from 'playwright';
+let chromium;
+try {
+  ({ chromium } = await import('playwright'));
+} catch (error) {
+  if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+  console.error(
+    [
+      'The browser checks need Playwright, which is not installed here.',
+      '',
+      'It is deliberately not a dependency of the plugin — it carries a browser',
+      'with it. Fetch it just for this run:',
+      '',
+      '    npm install --no-save playwright',
+      '    npx playwright install --with-deps chromium',
+      '',
+      'Then: npm run test:ui',
+      '',
+      '`npm test` does not need any of this.',
+    ].join('\n'),
+  );
+  process.exit(1);
+}
+
 import http from 'node:http';
 import { existsSync, statSync } from 'node:fs';
 import fs from 'node:fs';

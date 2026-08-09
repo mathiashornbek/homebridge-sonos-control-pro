@@ -131,6 +131,7 @@ module.exports = {
   'error.speakersGone': 'Kender ikke højttaleren {names}',
   'error.everyPlayerFailed': 'Ingen af højttalerne tog imod det: {names}',
   'error.sceneMissing': 'Scenen findes ikke',
+  'error.sceneIdMissing': 'Der blev ikke angivet nogen scene i forespørgslen',
   'error.apiMissing': 'Homebridge-API\'et mangler — plugin\'et kan ikke starte.',
   'error.playerMissing': 'Højttaleren findes ikke',
   'error.httpStatus': 'Fejl {status}',
@@ -581,6 +582,9 @@ module.exports = {
   'ui.editor.modeParallel': 'Alle på én gang (hvert trin venter sin egen forsinkelse)',
   'ui.editor.modeSequential': 'Ét ad gangen',
   'ui.editor.modeHelp': '"Alle på én gang" er som regel det du vil have.',
+  'ui.editor.allowConcurrent': 'Lad denne scene køre samtidig med andre',
+  'ui.editor.allowConcurrentHelp':
+    'Normalt stopper en scene, der vælger musik eller gruppering, enhver anden der gør det samme, så det nyeste tryk vinder. Sæt kun flueben her, hvis denne scene virkelig er ment til at overlappe.',
   'ui.editor.condition': 'Betingelse',
   'ui.editor.conditionHelp': 'Vælg noget andet end "Altid" for at få en ellers-gren.',
   'ui.editor.actions': 'Handlinger',

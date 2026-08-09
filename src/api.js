@@ -152,6 +152,30 @@ class ControlApi {
     response.end(payload);
   }
 
+  /**
+   * Answer whether `id` names a scene, and say so on the wire if it does not.
+   *
+   * These routes used to read `body.id` without looking at it. A request with
+   * no id at all deleted nothing and reported success; an id for a scene that
+   * had just been removed in another tab came back as a 500 with an internal
+   * message in it, which the settings page showed as "the bridge is broken".
+   * Neither is true: one is a malformed request, the other is a stale one.
+   *
+   * @private
+   * @returns {boolean} true when the caller may carry on.
+   */
+  _knownSceneId(response, id) {
+    if (typeof id !== 'string' || !id.trim()) {
+      this._send(response, 400, { error: t('error.sceneIdMissing') });
+      return false;
+    }
+    if (!this.platform.store.get(id)) {
+      this._send(response, 404, { error: t('error.sceneGone', { id }) });
+      return false;
+    }
+    return true;
+  }
+
   /** @private */
   async _readBody(request) {
     const chunks = [];
@@ -380,6 +404,7 @@ class ControlApi {
     }
 
     if (route === 'POST /scenes/delete') {
+      if (!this._knownSceneId(response, body.id)) return;
       platform.store.remove(body.id);
       await platform.store.save();
       platform.syncAccessories();
@@ -388,6 +413,7 @@ class ControlApi {
     }
 
     if (route === 'POST /scenes/duplicate') {
+      if (!this._knownSceneId(response, body.id)) return;
       const scene = platform.store.duplicate(body.id);
       await platform.store.save();
       platform.syncAccessories();
@@ -422,6 +448,7 @@ class ControlApi {
 
     // ------------------------------------------------------------------ runs
     if (route === 'POST /scenes/run') {
+      if (!this._knownSceneId(response, body.id)) return;
       const result = await platform.runner.run(body.id, {
         branch: body.branch === 'off' ? 'off' : 'on',
         trigger: t('trigger.ui'),
@@ -431,6 +458,7 @@ class ControlApi {
     }
 
     if (route === 'POST /scenes/stop') {
+      if (!this._knownSceneId(response, body.id)) return;
       const stopped = platform.runner.cancel(body.id, t('reason.stoppedFromUi'));
       this._send(response, 200, { stopped });
       return;

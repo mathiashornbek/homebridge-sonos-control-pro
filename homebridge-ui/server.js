@@ -239,6 +239,21 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
     return result.body;
   }
 
+  /**
+   * @private Refuse a request that names no scene, or one that is not there.
+   * The same distinction the bridge makes: 400 for a malformed request, 404 for
+   * a stale one. Call after `store.load()`, so the answer is about the file as
+   * it is now.
+   */
+  requireScene(id) {
+    if (typeof id !== 'string' || !id.trim()) {
+      throw new RequestError(t('error.sceneIdMissing'), { status: 400 });
+    }
+    if (!this.store.get(id)) {
+      throw new RequestError(t('error.sceneGone', { id }), { status: 404 });
+    }
+  }
+
   /** @private Scene CRUD still works with the bridge stopped. */
   offlineFallback(method, route, body) {
     const routes = {
@@ -268,13 +283,15 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
       },
       'POST /scenes/delete': async () => {
         this.store.load();
-        this.store.remove(body?.id);
+        this.requireScene(body?.id);
+        this.store.remove(body.id);
         await this.store.save();
         return { scenes: this.store.list(), offline: true };
       },
       'POST /scenes/duplicate': async () => {
         this.store.load();
-        const scene = this.store.duplicate(body?.id);
+        this.requireScene(body?.id);
+        const scene = this.store.duplicate(body.id);
         await this.store.save();
         return { scene, offline: true };
       },

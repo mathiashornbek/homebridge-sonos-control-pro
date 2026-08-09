@@ -242,6 +242,40 @@ test('scenes can be created, run and deleted over the API', async (t) => {
   assert.equal(removed.body.scenes.length, 0);
 });
 
+// These four read `body.id` and did nothing with it. A request that named no
+// scene reported success having done nothing, and an id for a scene deleted in
+// another tab came back as a 500 — which the settings page reads as "the bridge
+// is broken" rather than "that one is gone, reload".
+test('a scene route with no id is a bad request, and an unknown one a 404', async (t) => {
+  const h = await apiHarness();
+  t.after(() => h.close());
+
+  const created = await h.call('POST', '/scenes', { scene: { name: 'Findes' } });
+  const realId = created.body.scene.id;
+
+  for (const route of ['/scenes/delete', '/scenes/duplicate', '/scenes/run', '/scenes/stop']) {
+    const missing = await h.call('POST', route, {});
+    assert.equal(missing.status, 400, `${route} with no id`);
+    assert.ok(missing.body.error, `${route} says why`);
+
+    const blank = await h.call('POST', route, { id: '   ' });
+    assert.equal(blank.status, 400, `${route} with a blank id`);
+
+    const wrongType = await h.call('POST', route, { id: 42 });
+    assert.equal(wrongType.status, 400, `${route} with an id that is not a string`);
+
+    const unknown = await h.call('POST', route, { id: 'scene-der-blev-slettet' });
+    assert.equal(unknown.status, 404, `${route} with an id nobody knows`);
+    assert.ok(unknown.body.error.includes('scene-der-blev-slettet'), `${route} names it`);
+  }
+
+  // And the scene that does exist is still reachable through all of them.
+  assert.equal((await h.call('POST', '/scenes/run', { id: realId })).status, 200);
+  assert.equal((await h.call('POST', '/scenes/stop', { id: realId })).status, 200);
+  assert.equal((await h.call('POST', '/scenes/duplicate', { id: realId })).status, 200);
+  assert.equal((await h.call('POST', '/scenes/delete', { id: realId })).status, 200);
+});
+
 test('a single step can be tested without saving anything', async (t) => {
   const h = await apiHarness();
   t.after(() => h.close());

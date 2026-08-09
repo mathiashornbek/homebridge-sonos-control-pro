@@ -130,6 +130,7 @@ module.exports = {
   'error.speakersGone': 'No such speaker: {names}',
   'error.everyPlayerFailed': 'None of the speakers accepted this: {names}',
   'error.sceneMissing': 'That scene does not exist',
+  'error.sceneIdMissing': 'No scene was named in the request',
   'error.apiMissing': 'The Homebridge API is missing — the plugin cannot start.',
   'error.playerMissing': 'That speaker does not exist',
   'error.httpStatus': 'Error {status}',
@@ -576,6 +577,9 @@ module.exports = {
   'ui.editor.modeParallel': 'All at once (each step waits out its own delay)',
   'ui.editor.modeSequential': 'One at a time',
   'ui.editor.modeHelp': '"All at once" is usually what you want.',
+  'ui.editor.allowConcurrent': 'Let this scene run alongside others',
+  'ui.editor.allowConcurrentHelp':
+    'Normally a scene that chooses music or grouping stops any other one doing the same, so the newest press wins. Tick this only if this scene is genuinely meant to overlap.',
   'ui.editor.condition': 'Condition',
   'ui.editor.conditionHelp': 'Choose something other than "Always" to get an otherwise branch.',
   'ui.editor.actions': 'Actions',

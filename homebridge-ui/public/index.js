@@ -99,7 +99,7 @@ function renderLanguagePicker() {
   picker.innerHTML = state.languages
     .map(
       (entry) =>
-        `<option value="${entry.code}" ${entry.code === selected ? 'selected' : ''}>${escapeHtml(
+        `<option value="${escapeHtml(entry.code)}" ${entry.code === selected ? 'selected' : ''}>${escapeHtml(
           entry.label || t(entry.labelKey),
         )}</option>`,
     )
@@ -263,8 +263,8 @@ function confirmDialog({ title, body = '', confirmLabel, cancelLabel, danger = f
 async function promptVolume({ title, body = '', value = 10 } = {}) {
   const extra = `
     <div class="sf-row" style="margin-top:14px;gap:12px">
-      <input id="dialog-range" type="range" min="0" max="100" value="${value}" style="flex:1" />
-      <span id="dialog-range-value" class="sf-volume-value">${value}%</span>
+      <input id="dialog-range" type="range" min="0" max="100" value="${num(value, 0)}" style="flex:1" />
+      <span id="dialog-range-value" class="sf-volume-value">${num(value, 0)}%</span>
     </div>`;
   const result = await openDialog({
     title,
@@ -386,7 +386,7 @@ const ICON_CHOICES = ['music', 'radio', 'flame', 'pause', 'link', 'volume-up', '
 
 function icon(name, size = 18) {
   const body = ICONS[name] || ICONS.music;
-  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  return `<svg viewBox="0 0 24 24" width="${num(size, 18)}" height="${num(size, 18)}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 }
 
 /** Look up an action definition by id across all categories. */
@@ -943,9 +943,9 @@ function renderPlayers() {
               ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>'
               : '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'}
           </button>
-          <input class="sf-volume" type="range" min="0" max="100" value="${player.volume ?? 0}"
+          <input class="sf-volume" type="range" min="0" max="100" value="${num(player.volume, 0)}"
                  data-act="player-volume" data-name="${escapeHtml(player.name)}" />
-          <span class="sf-volume-value">${player.volume ?? '–'}%</span>
+          <span class="sf-volume-value">${num(player.volume, '–')}%</span>
         </div>
       </article>`;
     })
@@ -1042,10 +1042,10 @@ function renderPresets() {
           ${preset.sceneNames.map((name) => `<span class="sf-chip sf-chip--mini">${escapeHtml(name)}</span>`).join('')}
         </div>
         <div class="sf-row sf-row--wrap">
-          <button class="sf-btn sf-btn--primary" data-act="preset-apply" data-id="${preset.id}" data-mode="replace">
+          <button class="sf-btn sf-btn--primary" data-act="preset-apply" data-id="${escapeHtml(preset.id)}" data-mode="replace">
             ${escapeHtml(t('ui.tools.presetReplace'))}
           </button>
-          <button class="sf-btn sf-btn--ghost" data-act="preset-apply" data-id="${preset.id}" data-mode="merge">
+          <button class="sf-btn sf-btn--ghost" data-act="preset-apply" data-id="${escapeHtml(preset.id)}" data-mode="merge">
             ${escapeHtml(t('ui.tools.presetMerge'))}
           </button>
         </div>
@@ -1067,6 +1067,7 @@ function blankScene() {
     switchType: 'momentary',
     autoOffMs: 1000,
     mode: 'parallel',
+    allowConcurrent: false,
     condition: { type: 'always', params: {} },
     steps: [],
     elseSteps: [],
@@ -1214,7 +1215,7 @@ function renderEditor() {
             <div class="sf-chips" id="ed-icon">
               ${ICON_CHOICES.map(
                 (name) =>
-                  `<button type="button" class="sf-chip ${scene.icon === name ? 'is-on' : ''}" data-act="pick-icon" data-icon="${name}" title="${name}">${icon(name, 15)}</button>`,
+                  `<button type="button" class="sf-chip ${scene.icon === name ? 'is-on' : ''}" data-act="pick-icon" data-icon="${escapeHtml(name)}" title="${escapeHtml(name)}">${icon(name, 15)}</button>`,
               ).join('')}
             </div>
           </div>
@@ -1244,7 +1245,7 @@ function renderEditor() {
             <label for="ed-autooff">${escapeHtml(t(scene.switchType === 'stateful' ? 'ui.editor.autoOffUnused' : 'ui.editor.autoOff'))}</label>
             <select id="ed-autooff" class="sf-select" ${scene.switchType === 'stateful' ? 'disabled' : ''}>
               ${[400, 600, 1000, 1500, 2000, 3000]
-                .map((value) => `<option value="${value}" ${scene.autoOffMs === value ? 'selected' : ''}>${fmtMs(value)}</option>`)
+                .map((value) => `<option value="${num(value, 0)}" ${scene.autoOffMs === value ? 'selected' : ''}>${fmtMs(value)}</option>`)
                 .join('')}
             </select>
           </div>
@@ -1262,12 +1263,19 @@ function renderEditor() {
             <label for="ed-condition">${escapeHtml(t('ui.editor.condition'))}</label>
             <select id="ed-condition" class="sf-select">
               ${state.conditions
-                .map((condition) => `<option value="${condition.id}" ${scene.condition.type === condition.id ? 'selected' : ''}>${escapeHtml(condition.label)}</option>`)
+                .map((condition) => `<option value="${escapeHtml(condition.id)}" ${scene.condition.type === condition.id ? 'selected' : ''}>${escapeHtml(condition.label)}</option>`)
                 .join('')}
             </select>
             <small>${escapeHtml(t('ui.editor.conditionHelp'))}</small>
           </div>
         </div>
+        <label class="sf-row" style="gap:8px;cursor:pointer;align-items:flex-start;margin-top:14px">
+          <input id="ed-allow-concurrent" type="checkbox" ${scene.allowConcurrent === true ? 'checked' : ''} />
+          <span>
+            ${escapeHtml(t('ui.editor.allowConcurrent'))}
+            <small style="display:block">${escapeHtml(t('ui.editor.allowConcurrentHelp'))}</small>
+          </span>
+        </label>
         <div id="ed-condition-params" style="margin-top:12px">${renderConditionParams(scene.condition)}</div>
       </div>
     </section>
@@ -1329,22 +1337,22 @@ function renderStep(step, index, listKey) {
 
   return `
   <article class="sf-step ${open ? 'is-open' : ''} ${step.enabled === false ? 'is-off' : ''}"
-           data-step="${escapeHtml(step.id)}" data-list="${listKey}" draggable="true">
+           data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" draggable="true">
     <div class="sf-step-head" data-act="toggle-step" data-step="${escapeHtml(step.id)}">
       <span class="sf-drag" title="${escapeHtml(t('ui.scenes.dragHint'))}">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
       </span>
-      <span class="sf-step-index">${index + 1}</span>
+      <span class="sf-step-index">${num(index + 1, 0)}</span>
       <div class="sf-step-title">
         <strong>${escapeHtml(label)}</strong>
         <small>${escapeHtml(summary)}</small>
       </div>
       ${problems.length ? `<span class="sf-pill sf-pill--warn" title="${escapeHtml(problems.join(' · '))}">!</span>` : ''}
       ${step.delayMs > 0 ? `<span class="sf-pill sf-pill--muted">+${fmtMs(step.delayMs)}</span>` : ''}
-      <button class="sf-btn sf-btn--icon" data-act="test-step" data-step="${escapeHtml(step.id)}" data-list="${listKey}" title="${escapeHtml(t('ui.editor.testStep'))}" ${state.connected ? '' : 'disabled'}>
+      <button class="sf-btn sf-btn--icon" data-act="test-step" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" title="${escapeHtml(t('ui.editor.testStep'))}" ${state.connected ? '' : 'disabled'}>
         <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
       </button>
-      <button class="sf-btn sf-btn--icon" data-act="delete-step" data-step="${escapeHtml(step.id)}" data-list="${listKey}" title="${escapeHtml(t('ui.editor.removeStep'))}">
+      <button class="sf-btn sf-btn--icon" data-act="delete-step" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" title="${escapeHtml(t('ui.editor.removeStep'))}">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </div>
@@ -1408,7 +1416,7 @@ function renderStepBody(step, listKey) {
     .map(
       (group) =>
         `<optgroup label="${escapeHtml(group.category)}">${group.actions
-          .map((action) => `<option value="${action.id}" ${action.id === step.action ? 'selected' : ''}>${escapeHtml(action.label)}</option>`)
+          .map((action) => `<option value="${escapeHtml(action.id)}" ${action.id === step.action ? 'selected' : ''}>${escapeHtml(action.label)}</option>`)
           .join('')}</optgroup>`,
     )
     .join('');
@@ -1416,7 +1424,7 @@ function renderStepBody(step, listKey) {
   const parts = [
     `<div class="sf-field">
       <label>${escapeHtml(t('ui.editor.action'))}</label>
-      <select class="sf-select" data-field="action" data-step="${escapeHtml(step.id)}" data-list="${listKey}">${actionOptions}</select>
+      <select class="sf-select" data-field="action" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">${actionOptions}</select>
       ${definition?.help ? `<small>${escapeHtml(definition.help)}</small>` : ''}
     </div>`,
   ];
@@ -1444,13 +1452,13 @@ function renderStepBody(step, listKey) {
           <label>${escapeHtml(t('ui.editor.stepDelay'))}</label>
           <div class="sf-row">
             <input class="sf-input" type="number" min="0" step="0.5" style="max-width:110px"
-                   value="${(step.delayMs || 0) / 1000}" data-field="delaySeconds" data-step="${escapeHtml(step.id)}" data-list="${listKey}" />
+                   value="${num(step.delayMs, 0) / 1000}" data-field="delaySeconds" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" />
             <span class="sf-hint">${escapeHtml(t('ui.editor.stepDelayUnit'))}</span>
           </div>
           <small>${escapeHtml(t('ui.editor.stepDelayHelp'))}</small>
         </div>
         <label class="sf-row" style="gap:8px;cursor:pointer;align-items:flex-start">
-          <input type="checkbox" data-field="enabled" data-step="${escapeHtml(step.id)}" data-list="${listKey}" ${step.enabled !== false ? 'checked' : ''} />
+          <input type="checkbox" data-field="enabled" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" ${step.enabled !== false ? 'checked' : ''} />
           <span class="sf-hint">${escapeHtml(t('ui.editor.stepEnabled'))}</span>
         </label>
       </div>
@@ -1468,11 +1476,11 @@ function renderTargetPicker(step, listKey) {
   <div class="sf-field">
     <label>${escapeHtml(t('target.label'))}</label>
     <div class="sf-grid-2">
-      <select class="sf-select" data-field="target.type" data-step="${escapeHtml(step.id)}" data-list="${listKey}">
-        ${state.targetTypes.map((entry) => `<option value="${entry.value}" ${target.type === entry.value ? 'selected' : ''}>${escapeHtml(entry.label)}</option>`).join('')}
+      <select class="sf-select" data-field="target.type" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">
+        ${state.targetTypes.map((entry) => `<option value="${escapeHtml(entry.value)}" ${target.type === entry.value ? 'selected' : ''}>${escapeHtml(entry.label)}</option>`).join('')}
       </select>
-      <select class="sf-select" data-field="target.filter" data-step="${escapeHtml(step.id)}" data-list="${listKey}">
-        ${state.filters.map((entry) => `<option value="${entry.value}" ${target.filter === entry.value ? 'selected' : ''}>${escapeHtml(entry.label)}</option>`).join('')}
+      <select class="sf-select" data-field="target.filter" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">
+        ${state.filters.map((entry) => `<option value="${escapeHtml(entry.value)}" ${target.filter === entry.value ? 'selected' : ''}>${escapeHtml(entry.label)}</option>`).join('')}
       </select>
     </div>
     ${needsNames ? `<div style="margin-top:9px">${renderPlayerChips(target.names || [], `target.names`, step.id, listKey, true)}</div>` : ''}
@@ -1488,12 +1496,12 @@ function renderPlayerChips(selected, field, stepId, listKey, withBulk = false) {
   const unknown = (selected || []).filter((name) => !names.includes(name));
   const all = [...names, ...unknown];
   return `
-    <div class="sf-chips" data-chipset="${field}" data-step="${stepId}" data-list="${listKey}">
+    <div class="sf-chips" data-chipset="${escapeHtml(field)}" data-step="${escapeHtml(stepId)}" data-list="${escapeHtml(listKey)}">
       ${all
         .map(
           (name) =>
             `<button type="button" class="sf-chip ${(selected || []).includes(name) ? 'is-on' : ''} ${names.includes(name) ? '' : 'is-missing'}"
-                data-act="chip" data-field="${field}" data-step="${stepId}" data-list="${listKey}" data-name="${escapeHtml(name)}"
+                data-act="chip" data-field="${escapeHtml(field)}" data-step="${escapeHtml(stepId)}" data-list="${escapeHtml(listKey)}" data-name="${escapeHtml(name)}"
                 title="${names.includes(name) ? '' : escapeHtml(t('ui.editor.unknownSpeaker'))}">${escapeHtml(name)}</button>`,
         )
         .join('')}
@@ -1501,8 +1509,8 @@ function renderPlayerChips(selected, field, stepId, listKey, withBulk = false) {
     </div>
     ${withBulk && all.length
       ? `<div class="sf-row" style="margin-top:7px">
-           <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="chip-all" data-field="${field}" data-step="${stepId}" data-list="${listKey}">${escapeHtml(t('ui.editor.selectAll'))}</button>
-           <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="chip-none" data-field="${field}" data-step="${stepId}" data-list="${listKey}">${escapeHtml(t('ui.editor.clear'))}</button>
+           <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="chip-all" data-field="${escapeHtml(field)}" data-step="${escapeHtml(stepId)}" data-list="${escapeHtml(listKey)}">${escapeHtml(t('ui.editor.selectAll'))}</button>
+           <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="chip-none" data-field="${escapeHtml(field)}" data-step="${escapeHtml(stepId)}" data-list="${escapeHtml(listKey)}">${escapeHtml(t('ui.editor.clear'))}</button>
          </div>`
       : ''}`;
 }
@@ -1511,7 +1519,7 @@ function renderPlayerSelect(value, field, stepId, listKey) {
   const names = playerNames();
   const options = [...new Set([...(value ? [value] : []), ...names])];
   return `
-    <select class="sf-select" data-field="${field}" data-step="${stepId}" data-list="${listKey}">
+    <select class="sf-select" data-field="${escapeHtml(field)}" data-step="${escapeHtml(stepId)}" data-list="${escapeHtml(listKey)}">
       <option value="">${escapeHtml(t('ui.editor.pickSpeaker'))}</option>
       ${options
         .map(
@@ -1557,7 +1565,7 @@ function renderGroupAndPlay(step, listKey) {
   <div class="sf-field">
     <label>${escapeHtml(t('action.groupAndPlay.source'))}</label>
     <div class="sf-grid-2">
-      <select class="sf-select" data-field="param:source.type" data-step="${escapeHtml(step.id)}" data-list="${listKey}">
+      <select class="sf-select" data-field="param:source.type" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">
         <option value="keep" ${source.type === 'keep' ? 'selected' : ''}>${escapeHtml(t('ui.editor.sourceKeep'))}</option>
         <option value="favorite" ${source.type === 'favorite' ? 'selected' : ''}>${escapeHtml(t('ui.editor.sourceFavorite'))}</option>
         <option value="playlist" ${source.type === 'playlist' ? 'selected' : ''}>${escapeHtml(t('ui.editor.sourcePlaylist'))}</option>
@@ -1567,8 +1575,8 @@ function renderGroupAndPlay(step, listKey) {
       ${source.type === 'keep'
         ? `<span class="sf-hint" style="align-self:center">${escapeHtml(t('ui.editor.sourceUnchanged'))}</span>`
         : source.type === 'uri'
-          ? `<input class="sf-input" type="text" placeholder="http://…" value="${escapeHtml(source.value || '')}" data-field="param:source.value" data-step="${escapeHtml(step.id)}" data-list="${listKey}" />`
-          : `<select class="sf-select" data-field="param:source.value" data-step="${escapeHtml(step.id)}" data-list="${listKey}">
+          ? `<input class="sf-input" type="text" placeholder="http://…" value="${escapeHtml(source.value || '')}" data-field="param:source.value" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" />`
+          : `<select class="sf-select" data-field="param:source.value" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">
                <option value="">${escapeHtml(t('ui.editor.pick'))}</option>
                ${[...new Set([...(source.value ? [source.value] : []), ...sourceValues.map((item) => item.title)])]
                  .map(
@@ -1585,7 +1593,7 @@ function renderGroupAndPlay(step, listKey) {
 
   <div class="sf-field">
     <label>${escapeHtml(t('action.groupAndPlay.membersMode'))}</label>
-    <select class="sf-select" data-field="param:membersMode" data-step="${escapeHtml(step.id)}" data-list="${listKey}">
+    <select class="sf-select" data-field="param:membersMode" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">
       <option value="all" ${membersMode === 'all' ? 'selected' : ''}>${escapeHtml(t('action.groupAndPlay.membersModeAll'))}</option>
       <option value="list" ${membersMode === 'list' ? 'selected' : ''}>${escapeHtml(t('action.groupAndPlay.membersModeList'))}</option>
     </select>
@@ -1615,7 +1623,7 @@ function renderGroupAndPlay(step, listKey) {
 
   <div class="sf-field">
     <label>${escapeHtml(t('action.groupAndPlay.timing'))}</label>
-    <select class="sf-select" data-field="param:timing" data-step="${escapeHtml(step.id)}" data-list="${listKey}">
+    <select class="sf-select" data-field="param:timing" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">
       <option value="auto" ${timing === 'auto' ? 'selected' : ''}>${escapeHtml(t('action.groupAndPlay.timingAuto'))}</option>
       <option value="fixed" ${timing === 'fixed' ? 'selected' : ''}>${escapeHtml(t('action.groupAndPlay.timingFixed'))}</option>
     </select>
@@ -1630,7 +1638,7 @@ function renderGroupAndPlay(step, listKey) {
             <label style="font-weight:500;font-size:.78rem">${escapeHtml(t('ui.editor.volumeAfter'))}</label>
             <div class="sf-row">
               <input class="sf-input" type="number" min="0" step="0.5" style="max-width:100px"
-                     value="${(params.volumeDelayMs ?? 1000) / 1000}" data-field="param:volumeDelayMs" data-unit="s" data-step="${escapeHtml(step.id)}" data-list="${listKey}" />
+                     value="${num(params.volumeDelayMs, 1000) / 1000}" data-field="param:volumeDelayMs" data-unit="s" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" />
               <span class="sf-hint">${escapeHtml(t('common.seconds'))}</span>
             </div>
           </div>
@@ -1638,7 +1646,7 @@ function renderGroupAndPlay(step, listKey) {
             <label style="font-weight:500;font-size:.78rem">${escapeHtml(t('ui.editor.groupAfter'))}</label>
             <div class="sf-row">
               <input class="sf-input" type="number" min="0" step="0.5" style="max-width:100px"
-                     value="${(params.groupDelayMs ?? 2000) / 1000}" data-field="param:groupDelayMs" data-unit="s" data-step="${escapeHtml(step.id)}" data-list="${listKey}" />
+                     value="${num(params.groupDelayMs, 2000) / 1000}" data-field="param:groupDelayMs" data-unit="s" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" />
               <span class="sf-hint">${escapeHtml(t('common.seconds'))}</span>
             </div>
           </div>
@@ -1650,9 +1658,9 @@ function renderGroupAndPlay(step, listKey) {
   <div class="sf-field">
     <label>${escapeHtml(t('ui.editor.volumePerSpeaker'))}</label>
     <div class="sf-row sf-row--wrap" style="margin-bottom:8px">
-      <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="vol-all" data-step="${escapeHtml(step.id)}" data-list="${listKey}">${escapeHtml(t('ui.editor.setAll'))}</button>
-      <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="vol-current" data-step="${escapeHtml(step.id)}" data-list="${listKey}" ${state.connected ? '' : 'disabled'}>${escapeHtml(t('ui.editor.useCurrent'))}</button>
-      <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="vol-clear" data-step="${escapeHtml(step.id)}" data-list="${listKey}">${escapeHtml(t('ui.editor.clearAll'))}</button>
+      <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="vol-all" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">${escapeHtml(t('ui.editor.setAll'))}</button>
+      <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="vol-current" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" ${state.connected ? '' : 'disabled'}>${escapeHtml(t('ui.editor.useCurrent'))}</button>
+      <button type="button" class="sf-btn sf-btn--ghost sf-btn--sm" data-act="vol-clear" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">${escapeHtml(t('ui.editor.clearAll'))}</button>
     </div>
     <div class="sf-volmap">
       ${volumeRooms.length === 0 ? `<span class="sf-hint">${escapeHtml(t('ui.editor.pickLeaderFirst'))}</span>` : ''}
@@ -1664,15 +1672,15 @@ function renderGroupAndPlay(step, listKey) {
           <div class="sf-volrow ${set ? '' : 'is-unset'}">
             <span class="sf-volrow-name" title="${escapeHtml(name)}">${escapeHtml(name)}${name === coordinator ? ' ★' : ''}</span>
             <input type="range" min="0" max="100" value="${num(value, 10)}"
-                   data-act="vol-set" data-name="${escapeHtml(name)}" data-step="${escapeHtml(step.id)}" data-list="${listKey}" />
+                   data-act="vol-set" data-name="${escapeHtml(name)}" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" />
             <span class="sf-volrow-num">
               <input type="number" min="0" max="100" step="1" inputmode="numeric"
                      value="${set ? num(value, '') : ''}" placeholder="—"
                      aria-label="${escapeHtml(name)}"
-                     data-act="vol-num" data-name="${escapeHtml(name)}" data-step="${escapeHtml(step.id)}" data-list="${listKey}" />
+                     data-act="vol-num" data-name="${escapeHtml(name)}" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" />
               <span aria-hidden="true">%</span>
             </span>
-            <button type="button" class="sf-btn sf-btn--icon" data-act="vol-unset" data-name="${escapeHtml(name)}" data-step="${escapeHtml(step.id)}" data-list="${listKey}" title="${escapeHtml(t('ui.editor.dontTouch'))}">
+            <button type="button" class="sf-btn sf-btn--icon" data-act="vol-unset" data-name="${escapeHtml(name)}" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" title="${escapeHtml(t('ui.editor.dontTouch'))}">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
           </div>`;
@@ -1687,7 +1695,7 @@ function renderGroupAndPlay(step, listKey) {
     <div class="sf-grid-2" style="margin-top:11px">
       <div class="sf-field">
         <label>${escapeHtml(t('action.groupAndPlay.shuffle'))}</label>
-        <select class="sf-select" data-field="param:shuffle" data-tristate="1" data-step="${escapeHtml(step.id)}" data-list="${listKey}">
+        <select class="sf-select" data-field="param:shuffle" data-tristate="1" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">
           <option value="" ${params.shuffle === null || params.shuffle === undefined ? 'selected' : ''}>${escapeHtml(t('tristate.unchanged'))}</option>
           <option value="true" ${params.shuffle === true ? 'selected' : ''}>${escapeHtml(t('tristate.on'))}</option>
           <option value="false" ${params.shuffle === false ? 'selected' : ''}>${escapeHtml(t('tristate.off'))}</option>
@@ -1695,7 +1703,7 @@ function renderGroupAndPlay(step, listKey) {
       </div>
       <div class="sf-field">
         <label>${escapeHtml(t('action.groupAndPlay.repeat'))}</label>
-        <select class="sf-select" data-field="param:repeat" data-step="${escapeHtml(step.id)}" data-list="${listKey}">
+        <select class="sf-select" data-field="param:repeat" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">
           <option value="" ${params.repeat === null || params.repeat === undefined ? 'selected' : ''}>${escapeHtml(t('tristate.unchanged'))}</option>
           <option value="none" ${params.repeat === 'none' ? 'selected' : ''}>${escapeHtml(t('repeat.none'))}</option>
           <option value="all" ${params.repeat === 'all' ? 'selected' : ''}>${escapeHtml(t('repeat.all'))}</option>
@@ -1704,7 +1712,7 @@ function renderGroupAndPlay(step, listKey) {
       </div>
       <div class="sf-field">
         <label>${escapeHtml(t('action.groupAndPlay.crossfade'))}</label>
-        <select class="sf-select" data-field="param:crossfade" data-tristate="1" data-step="${escapeHtml(step.id)}" data-list="${listKey}">
+        <select class="sf-select" data-field="param:crossfade" data-tristate="1" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}">
           <option value="" ${params.crossfade === null || params.crossfade === undefined ? 'selected' : ''}>${escapeHtml(t('tristate.unchanged'))}</option>
           <option value="true" ${params.crossfade === true ? 'selected' : ''}>${escapeHtml(t('tristate.on'))}</option>
           <option value="false" ${params.crossfade === false ? 'selected' : ''}>${escapeHtml(t('tristate.off'))}</option>
@@ -1715,7 +1723,7 @@ function renderGroupAndPlay(step, listKey) {
             <label>${escapeHtml(t('ui.editor.setAfter'))}</label>
             <div class="sf-row">
               <input class="sf-input" type="number" min="0" step="0.5" style="max-width:100px"
-                     value="${(params.modeDelayMs ?? 3000) / 1000}" data-field="param:modeDelayMs" data-unit="s" data-step="${escapeHtml(step.id)}" data-list="${listKey}" />
+                     value="${num(params.modeDelayMs, 3000) / 1000}" data-field="param:modeDelayMs" data-unit="s" data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}" />
               <span class="sf-hint">${escapeHtml(t('common.seconds'))}</span>
             </div>
           </div>`
@@ -1725,7 +1733,7 @@ function renderGroupAndPlay(step, listKey) {
 }
 
 function renderParamField(param, value, field, step, listKey) {
-  const stepAttrs = step ? `data-step="${escapeHtml(step.id)}" data-list="${listKey}"` : 'data-step="" data-list=""';
+  const stepAttrs = step ? `data-step="${escapeHtml(step.id)}" data-list="${escapeHtml(listKey)}"` : 'data-step="" data-list=""';
   const label = `<label>${escapeHtml(param.label)}</label>`;
   const hint = param.help ? `<small>${escapeHtml(param.help)}</small>` : '';
   const base = (control) => `<div class="sf-field">${label}${control}${hint}</div>`;
@@ -1734,13 +1742,13 @@ function renderParamField(param, value, field, step, listKey) {
     case 'boolean':
       return base(
         `<label class="sf-row" style="gap:8px;cursor:pointer">
-           <input type="checkbox" data-field="${field}" ${stepAttrs} ${value === undefined ? (param.default ? 'checked' : '') : value ? 'checked' : ''} />
+           <input type="checkbox" data-field="${escapeHtml(field)}" ${stepAttrs} ${value === undefined ? (param.default ? 'checked' : '') : value ? 'checked' : ''} />
            <span class="sf-hint">${escapeHtml(param.label)}</span>
          </label>`,
       );
     case 'select':
       return base(
-        `<select class="sf-select" data-field="${field}" ${stepAttrs}>
+        `<select class="sf-select" data-field="${escapeHtml(field)}" ${stepAttrs}>
            ${(param.options || []).map((option) => `<option value="${escapeHtml(option.value)}" ${String(value ?? param.default) === String(option.value) ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
          </select>`,
       );
@@ -1763,7 +1771,7 @@ function renderParamField(param, value, field, step, listKey) {
             : state.library.radio;
       const titles = [...new Set([...(value ? [value] : []), ...items.map((item) => item.title)])];
       return base(
-        `<select class="sf-select" data-field="${field}" ${stepAttrs}>
+        `<select class="sf-select" data-field="${escapeHtml(field)}" ${stepAttrs}>
            <option value="">${escapeHtml(t('ui.editor.pick'))}</option>
            ${titles.map((title) => `<option value="${escapeHtml(title)}" ${value === title ? 'selected' : ''}>${escapeHtml(title)}</option>`).join('')}
          </select>`,
@@ -1771,7 +1779,7 @@ function renderParamField(param, value, field, step, listKey) {
     }
     case 'scene':
       return base(
-        `<select class="sf-select" data-field="${field}" ${stepAttrs}>
+        `<select class="sf-select" data-field="${escapeHtml(field)}" ${stepAttrs}>
            <option value="">${escapeHtml(t('ui.editor.pickScene'))}</option>
            ${state.scenes.map((scene) => `<option value="${escapeHtml(scene.id)}" ${value === scene.id ? 'selected' : ''}>${escapeHtml(scene.name)}</option>`).join('')}
          </select>`,
@@ -1779,22 +1787,22 @@ function renderParamField(param, value, field, step, listKey) {
     case 'volume':
       return base(
         `<div class="sf-row">
-           <input type="range" min="${num(param.min, 0)}" max="${num(param.max, 100)}" value="${num(value ?? param.default, 10)}" data-field="${field}" ${stepAttrs} />
+           <input type="range" min="${num(param.min, 0)}" max="${num(param.max, 100)}" value="${num(value ?? param.default, 10)}" data-field="${escapeHtml(field)}" ${stepAttrs} />
            <span class="sf-volume-value">${num(value ?? param.default, 10)}%</span>
          </div>`,
       );
     case 'number':
       return base(
         `<input class="sf-input" type="number" ${param.min !== undefined ? `min="${num(param.min, 0)}"` : ''} ${param.max !== undefined ? `max="${num(param.max, 100)}"` : ''} step="${num(param.step, 1)}"
-                value="${num(value ?? param.default, '')}" placeholder="${escapeHtml(param.placeholder || '')}" data-field="${field}" ${stepAttrs} />`,
+                value="${num(value ?? param.default, '')}" placeholder="${escapeHtml(param.placeholder || '')}" data-field="${escapeHtml(field)}" ${stepAttrs} />`,
       );
     case 'time':
       return base(
-        `<input class="sf-input" type="time" value="${escapeHtml(value ?? param.default ?? '')}" data-field="${field}" ${stepAttrs} />`,
+        `<input class="sf-input" type="time" value="${escapeHtml(value ?? param.default ?? '')}" data-field="${escapeHtml(field)}" ${stepAttrs} />`,
       );
     default:
       return base(
-        `<input class="sf-input" type="text" value="${escapeHtml(value ?? param.default ?? '')}" placeholder="${escapeHtml(param.placeholder || '')}" data-field="${field}" ${stepAttrs} />`,
+        `<input class="sf-input" type="text" value="${escapeHtml(value ?? param.default ?? '')}" placeholder="${escapeHtml(param.placeholder || '')}" data-field="${escapeHtml(field)}" ${stepAttrs} />`,
       );
   }
 }
@@ -1802,7 +1810,7 @@ function renderParamField(param, value, field, step, listKey) {
 function renderPlayerSelectRaw(value, field, stepAttrs) {
   const names = playerNames();
   const options = [...new Set([...(value ? [value] : []), ...names])];
-  return `<select class="sf-select" data-field="${field}" ${stepAttrs}>
+  return `<select class="sf-select" data-field="${escapeHtml(field)}" ${stepAttrs}>
       <option value="">${escapeHtml(t('ui.editor.pickSpeaker'))}</option>
       ${options.map((name) => `<option value="${escapeHtml(name)}" ${value === name ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}
     </select>`;
@@ -1946,6 +1954,10 @@ function wireEditor() {
   $('#ed-mode').addEventListener('change', (event) => {
     state.editing.mode = event.target.value;
     renderEditor();
+  });
+  $('#ed-allow-concurrent').addEventListener('change', (event) => {
+    state.editing.allowConcurrent = event.target.checked;
+    markDirty();
   });
   $('#ed-condition').addEventListener('change', (event) => {
     state.editing.condition = { type: event.target.value, params: {} };

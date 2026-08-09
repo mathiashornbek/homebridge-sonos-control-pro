@@ -80,6 +80,11 @@ function materialPart(buffer) {
   }
 }
 
+/** Backup file name for a moment in time. Sorts oldest first, as a string. */
+function backupName(when) {
+  return `scenes-${new Date(when).toISOString().replace(/[:.]/g, '-')}.json`;
+}
+
 /** Settings are a free-form object. Anything else arriving in that field is not one. */
 function safeSettings(raw) {
   return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -100,6 +105,11 @@ function normalizeScene(raw, index = 0) {
     autoOffMs: clampNumber(scene.autoOffMs, 200, MAX_TIMER_MS, 1000),
     /** 'parallel': every step starts at once and waits out its own delay. */
     mode: scene.mode === 'sequential' ? 'sequential' : 'parallel',
+    // Scenes that decide what plays or who is grouped with whom cancel each
+    // other, because letting them fight makes both crawl. This opts a scene out
+    // of that — for the rare one that really is meant to overlap. See
+    // `SceneRunner._isExclusive`.
+    allowConcurrent: scene.allowConcurrent === true,
     // A shared scene saying "30 days, so it never gets cut off" used to overflow
     // the timer and abort every run of that scene instantly, blaming the speakers.
     maxRuntimeMs: clampNumber(scene.maxRuntimeMs, 1000, MAX_TIMER_MS, 60000),
@@ -478,8 +488,19 @@ class SceneStore extends EventEmitter {
       // byte comparison would never skip anything.
       if (newest && materialPart(newest) === materialPart(current)) return;
     }
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    await fsp.writeFile(path.join(this.backupDir, `scenes-${stamp}.json`), current);
+    // The name is the clock to the millisecond, and two saves can land inside
+    // the same one — the editor saves the scene and then its order. That wrote
+    // the same file name twice, and the second copy replaced the first, so the
+    // state that was worth keeping disappeared while a copy of the current one
+    // took its place. Step forward until the name is free: still sorted, still
+    // unique.
+    let when = Date.now();
+    let name = backupName(when);
+    while (existing.includes(name)) {
+      when += 1;
+      name = backupName(when);
+    }
+    await fsp.writeFile(path.join(this.backupDir, name), current);
     await this._pruneBackups();
   }
 
