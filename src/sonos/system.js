@@ -140,6 +140,12 @@ class SonosSystem extends EventEmitter {
     this.ready = false;
     /** Rooms seen for the first time since the plugin started, newest first. */
     this.recentlyAdded = [];
+    /**
+     * Every uuid this process has ever had in `players`, so a speaker that is
+     * forgotten and found again is not announced as new a second time.
+     * @type {Set<string>}
+     */
+    this._everSeen = new Set();
   }
 
   /**
@@ -312,7 +318,18 @@ class SonosSystem extends EventEmitter {
       this.ready = this.players.size > 0;
 
       // Topology is what really reveals the household, so compare afterwards.
-      const appeared = this.list().filter((player) => !this._knownBefore.has(player.uuid));
+      //
+      // "Not known when this sweep started" is not the same as new. A player
+      // can leave our map and come back — a speaker that misses two topology
+      // replies is forgotten on purpose, and anything that answers SSDP is
+      // found again on the next sweep. Comparing against this sweep alone
+      // called that a new speaker, over and over. So a player has to be one we
+      // have never seen at all.
+      const appeared = this.list().filter(
+        (player) => !this._knownBefore.has(player.uuid) && !this._everSeen.has(player.uuid),
+      );
+      for (const uuid of this.players.keys()) this._everSeen.add(uuid);
+
       if (appeared.length > 0 && !this._firstSweep) {
         for (const player of appeared) {
           this.recentlyAdded = [
@@ -435,30 +452,59 @@ class SonosSystem extends EventEmitter {
       const coordinatorUuid = groupNode.attrs.Coordinator || '';
       const memberUuids = [];
 
-      for (const memberNode of groupNode.children) {
-        if (memberNode.local !== 'ZoneGroupMember') continue;
-        const uuid = memberNode.attrs.UUID;
-        if (!uuid) continue;
+      /**
+       * Take one speaker out of the topology and bring our copy up to date.
+       * @param {object} node
+       * @param {boolean} [bonded] A satellite is never a room, whatever it says.
+       * @returns {{uuid: string, invisible: boolean}|null}
+       */
+      const register = (node, bonded = false) => {
+        const uuid = node.attrs.UUID;
+        if (!uuid) return null;
 
         const invisible =
-          memberNode.attrs.Invisible === '1' || memberNode.attrs.IsZoneBridge === '1';
-        const locationMatch = /^https?:\/\/([^:/]+)(?::(\d+))?/.exec(memberNode.attrs.Location || '');
+          bonded || node.attrs.Invisible === '1' || node.attrs.IsZoneBridge === '1';
+        const locationMatch = /^https?:\/\/([^:/]+)(?::(\d+))?/.exec(node.attrs.Location || '');
         const host = locationMatch ? locationMatch[1] : '';
         const port = locationMatch?.[2] ? Number(locationMatch[2]) : this.port;
 
         let player = this.players.get(uuid);
         if (!player) {
-          player = new SonosPlayer({ uuid, host, name: memberNode.attrs.ZoneName || '', port });
+          player = new SonosPlayer({ uuid, host, name: node.attrs.ZoneName || '', port });
           this.players.set(uuid, player);
         }
         if (host) player.host = host;
         if (port) player.port = port;
-        if (memberNode.attrs.ZoneName) player.name = memberNode.attrs.ZoneName;
+        if (node.attrs.ZoneName) player.name = node.attrs.ZoneName;
         player.invisible = invisible;
         player.coordinatorUuid = coordinatorUuid || uuid;
         player.groupId = groupNode.attrs.ID || '';
         seen.add(uuid);
-        if (!invisible) memberUuids.push(uuid);
+        return { uuid, invisible };
+      };
+
+      for (const memberNode of groupNode.children) {
+        if (memberNode.local !== 'ZoneGroupMember') continue;
+        const member = register(memberNode);
+        if (!member) continue;
+        if (!member.invisible) memberUuids.push(member.uuid);
+
+        // A bonded speaker — the second half of a stereo pair, a Sub, a Sub
+        // Mini — is reported *inside* the member it belongs to, as a
+        // `<Satellite>`, never as a member of its own. Reading only the members
+        // meant these were absent from every topology reply, so the rule below
+        // forgot them; SSDP then found them again, because they are real
+        // devices on the network with their own address, and each rediscovery
+        // announced them as new speakers. Every five minutes, indefinitely.
+        //
+        // They are marked invisible whatever the attribute says. Sonos does set
+        // it, but a satellite is not a room by definition, and one firmware
+        // that omitted the flag would put the same speaker in the room list
+        // twice under the same name.
+        for (const satelliteNode of memberNode.children) {
+          if (satelliteNode.local !== 'Satellite') continue;
+          register(satelliteNode, true);
+        }
       }
 
       if (memberUuids.length > 0) {

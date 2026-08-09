@@ -10,6 +10,22 @@ All notable changes to Sonos Control Pro, newest first.
 
 ## Unreleased
 
+- **"New Sonos speakers found" every five minutes, naming the same speakers.**
+  A bonded speaker — the second half of a stereo pair, a Sub, a Sub Mini — is
+  reported inside the member it belongs to, as a `<Satellite>`, never as a
+  member of its own. The topology parser read only the members, so satellites
+  were absent from every reply and the rule that forgets a speaker after two
+  absences let them go. SSDP found them again on the next sweep, because they
+  are real devices with their own address, and each rediscovery announced them
+  as new. They are read now, and marked invisible.
+- **A bonded speaker was also offered as a room.** With no satellite in the
+  topology to say otherwise, the one found over SSDP looked like an ordinary
+  speaker: a stereo pair appeared twice under the same name, and a Sub appeared
+  as somewhere you could send music.
+- **A speaker that rebooted came back as a new one.** Being absent from two
+  topology replies is how a speaker is let go, and answering again is how it
+  returns — that is recovery working, not new hardware. "New" now means never
+  seen at all, not merely unknown when this sweep began.
 - **"Let this scene run alongside others" is a setting again.** The runner has
   always read `allowConcurrent` to decide whether a scene may overlap another,
   but the store rebuilt every scene without the field, so it was dropped on each

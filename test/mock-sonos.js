@@ -59,6 +59,8 @@ class MockHousehold {
     );
     /** uuid → coordinator uuid */
     this.grouping = new Map(this.players.map((player) => [player.uuid, player.uuid]));
+    /** uuid → the uuid it is bonded to. See `bond()`. */
+    this.satelliteOf = new Map();
     this.favorites = [];
     this.playlists = [];
     this.radio = [];
@@ -91,6 +93,36 @@ class MockHousehold {
 
   coordinatorOf(uuid) {
     return this.grouping.get(uuid) || uuid;
+  }
+
+  /**
+   * Bond a speaker to another one, the way a stereo pair's second speaker or a
+   * Sub is bonded in the Sonos app.
+   *
+   * A bonded speaker is a real device: it is on the network, it answers SSDP
+   * and it describes itself on its own port. What makes it different is how the
+   * household reports it — not as a `<ZoneGroupMember>` of its own, but as a
+   * `<Satellite>` nested inside the member it belongs to, flagged invisible.
+   * It is never addressed directly and never counted as a room.
+   *
+   * @param {string} ownerName The room it belongs to.
+   * @param {string} satelliteName The bonded speaker. A stereo pair's partner
+   *   carries the same room name as its owner; a Sub carries its own.
+   */
+  bond(ownerName, satelliteName) {
+    const owner = this.byName(ownerName);
+    const satellite = this.players.find(
+      (player) => player.name === satelliteName && player !== owner && !this.satelliteOf.has(player.uuid),
+    );
+    if (!owner || !satellite) throw new Error(`cannot bond ${satelliteName} to ${ownerName}`);
+    this.satelliteOf.set(satellite.uuid, owner.uuid);
+    this.grouping.set(satellite.uuid, this.coordinatorOf(owner.uuid));
+    return satellite;
+  }
+
+  /** @private The bonded speakers belonging to one member, in bonding order. */
+  satellitesOf(uuid) {
+    return this.players.filter((player) => this.satelliteOf.get(player.uuid) === uuid);
   }
 
   membersOf(coordinatorUuid) {
@@ -391,9 +423,11 @@ class MockHousehold {
     // A speaker that has just rebooted, or is on the wrong side of a VLAN,
     // reports a household containing only itself. Set `reportsOnly` to a uuid
     // to make every speaker answer with that partial view.
-    const visible = this.reportsOnly
-      ? this.players.filter((player) => player.uuid === this.reportsOnly)
-      : this.players;
+    const visible = (
+      this.reportsOnly
+        ? this.players.filter((player) => player.uuid === this.reportsOnly)
+        : this.players
+    ).filter((player) => !this.satelliteOf.has(player.uuid));
     for (const player of visible) {
       const coordinator = this.coordinatorOf(player.uuid);
       if (!groups.has(coordinator)) groups.set(coordinator, []);
@@ -406,11 +440,26 @@ class MockHousehold {
           ([coordinator, members]) =>
             `<ZoneGroup Coordinator="${coordinator}" ID="${coordinator}:1">` +
             members
-              .map(
-                (member) =>
+              .map((member) => {
+                const satellites = this.satellitesOf(member.uuid);
+                const open =
                   `<ZoneGroupMember UUID="${member.uuid}" Location="http://${member.host}:${member.port}/xml/device_description.xml" ` +
-                  `ZoneName="${escapeXml(member.name)}" Invisible="0" IsZoneBridge="0"/>`,
-              )
+                  `ZoneName="${escapeXml(member.name)}" Invisible="0" IsZoneBridge="0"`;
+                if (satellites.length === 0) return `${open}/>`;
+                // A bonded speaker is reported nested inside the member it
+                // belongs to, flagged invisible — never as a member of its own.
+                return (
+                  `${open}>` +
+                  satellites
+                    .map(
+                      (satellite) =>
+                        `<Satellite UUID="${satellite.uuid}" Location="http://${satellite.host}:${satellite.port}/xml/device_description.xml" ` +
+                        `ZoneName="${escapeXml(satellite.name)}" Invisible="1" IsZoneBridge="0"/>`,
+                    )
+                    .join('') +
+                  `</ZoneGroupMember>`
+                );
+              })
               .join('') +
             `</ZoneGroup>`,
         )

@@ -408,6 +408,152 @@ test('the mock household binds only to 127.0.0.1, on ports the OS picks', async 
   for (const player of household.players) assert.ok(player.port > 1024);
 });
 
+// --------------------------------------------------------- bonded speakers
+
+/**
+ * A household with bonded speakers, the way most real ones are: a stereo pair
+ * carries the room's name twice, and a Sub carries its own.
+ */
+async function bondedHousehold() {
+  const { MockHousehold } = require('./mock-sonos');
+  const household = new MockHousehold(['Kontor', 'Køkkenalrum', 'Køkkenalrum', 'Sub', 'Sub Mini']);
+  await household.listen();
+  household.bond('Køkkenalrum', 'Køkkenalrum'); // the pair's second speaker
+  household.bond('Køkkenalrum', 'Sub');
+  household.bond('Kontor', 'Sub Mini');
+  return household;
+}
+
+test('a bonded speaker is not a room, and is not offered as one', async (t) => {
+  const { SonosSystem } = require('../src/sonos/system');
+  const household = await bondedHousehold();
+  t.after(() => household.servers.forEach((server) => server.close()));
+
+  const system = new SonosSystem({
+    log: quietLog,
+    seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
+    discoveryTimeout: 100,
+    discoverFn: async () => [],
+  });
+  await system.discover({ force: true });
+
+  assert.deepEqual(
+    system.list().map((player) => player.name),
+    ['Kontor', 'Køkkenalrum'],
+    'the rooms, once each — not the Sub, and not the pair twice',
+  );
+  // They are known, so a scene naming one still resolves; they are just not
+  // rooms of their own.
+  assert.equal(system.players.size, 5);
+  assert.equal(system.resolve('Sub')?.name, 'Køkkenalrum', 'a Sub answers for the room it is in');
+});
+
+// The bug this is really about: the log said "New Sonos speakers found" every
+// five minutes, naming the same bonded speakers each time. Satellites were
+// absent from every topology reply, so the two-strikes rule forgot them; SSDP
+// found them again, because they are real devices with their own address; and
+// each rediscovery announced them as new.
+test('the same speakers are not announced as new on every sweep', async (t) => {
+  const { SonosSystem } = require('../src/sonos/system');
+  const household = await bondedHousehold();
+  t.after(() => household.servers.forEach((server) => server.close()));
+
+  const announced = [];
+  const system = new SonosSystem({
+    log: quietLog,
+    seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
+    discoveryTimeout: 100,
+    discoverFn: async () => [],
+  });
+  system.on('newPlayers', (names) => announced.push(names));
+
+  for (let sweep = 0; sweep < 4; sweep += 1) {
+    await system.discover({ force: true });
+    // The plugin refreshes topology on its own timer as well — every 30 s by
+    // default — so several of these land between two discovery sweeps. That is
+    // what turned "forgotten after two absences" into "forgotten every time".
+    await system.refreshTopology();
+    await system.refreshTopology();
+  }
+
+  assert.deepEqual(announced, [], 'nothing was new: it is the same household throughout');
+  assert.equal(system.players.size, 5, 'and nobody was forgotten along the way');
+});
+
+// The other half of the same message. A speaker is forgotten on purpose after
+// it misses two topology replies — a reboot, a VLAN that dropped for a minute —
+// and it is found again the moment it answers. That is recovery working, and it
+// used to be reported as though somebody had bought a speaker.
+test('a speaker that reboots and comes back is not announced as a new one', async (t) => {
+  const { SonosSystem } = require('../src/sonos/system');
+  const household = await bondedHousehold();
+  t.after(() => household.servers.forEach((server) => server.close()));
+
+  const announced = [];
+  const system = new SonosSystem({
+    log: quietLog,
+    seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
+    discoveryTimeout: 100,
+    discoverFn: async () => [],
+  });
+  system.on('newPlayers', (names) => announced.push(names));
+
+  await system.discover({ force: true });
+  const before = system.list().map((player) => player.name);
+  assert.deepEqual(before, ['Kontor', 'Køkkenalrum']);
+
+  // Every speaker now describes a household containing only Kontor, which is
+  // what one that has just rebooted does. Two replies in a row is the point at
+  // which the rest are given up on.
+  household.reportsOnly = household.byName('Kontor').uuid;
+  await system.refreshTopology();
+  await system.refreshTopology();
+  assert.deepEqual(system.list().map((player) => player.name), ['Kontor'], 'the rest were let go');
+
+  // And the household comes back.
+  household.reportsOnly = null;
+  await system.discover({ force: true });
+
+  assert.deepEqual(system.list().map((player) => player.name), before, 'everyone is back');
+  assert.deepEqual(announced, [], 'coming back is not the same as being new');
+});
+
+test('a speaker that really is new is still announced, once', async (t) => {
+  const { SonosSystem } = require('../src/sonos/system');
+  const household = await bondedHousehold();
+  t.after(() => household.servers.forEach((server) => server.close()));
+
+  const announced = [];
+  const system = new SonosSystem({
+    log: quietLog,
+    seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
+    discoveryTimeout: 100,
+    discoverFn: async () => [],
+  });
+  system.on('newPlayers', (names) => announced.push(names));
+
+  await system.discover({ force: true });
+  await system.discover({ force: true });
+  assert.deepEqual(announced, [], 'the household we started with is not news');
+
+  // Somebody plugs in a speaker this afternoon.
+  const added = await household.addPlayer('Badeværelse');
+  system.seedHosts = household.players.map((player) => `${player.host}:${player.port}`);
+  await system.discover({ force: true });
+
+  assert.deepEqual(announced, [['Badeværelse']], 'that one is news');
+  assert.ok(
+    system.recentlyAdded.some((entry) => entry.uuid === added.uuid),
+    'and it is offered to the scenes',
+  );
+
+  // Said once, not on every sweep from now on.
+  await system.discover({ force: true });
+  await system.refreshTopology();
+  await system.discover({ force: true });
+  assert.equal(announced.length, 1, 'and only once');
+});
+
 // ------------------------------------------------------- a house with no Sonos
 
 test('a household with nothing in it says so, rather than throwing', async () => {
