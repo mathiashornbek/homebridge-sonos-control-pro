@@ -8,7 +8,7 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
-## Unreleased
+## 3.5.0
 
 - **"New Sonos speakers found" every five minutes, naming the same speakers.**
   A bonded speaker — the second half of a stereo pair, a Sub, a Sub Mini — is
