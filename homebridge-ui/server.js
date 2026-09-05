@@ -172,11 +172,17 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
       };
     }
 
+    // Nothing here talks to a speaker. Status, scenes and the speaker list are
+    // what the bridge already knows, and the library is handed back from its
+    // cache. The page used to ask for every speaker's volume and playback state
+    // in this same breath, and could not draw a single scene until the slowest
+    // speaker had answered — eight seconds, measured, when one was asleep. The
+    // page asks for that itself, once it is on screen, and fills it in.
     const [status, scenes, players, library] = await Promise.all([
       this.proxy('GET', '/status'),
       this.proxy('GET', '/scenes'),
-      this.proxy('GET', '/players?state=1'),
-      this.proxy('GET', '/library'),
+      this.proxy('GET', '/players'),
+      this.proxy('GET', '/library?wait=0'),
     ]);
 
     // `!status` only catches a bridge that is not there. A bridge that answers
@@ -296,8 +302,11 @@ class SonosControlProUiServer extends HomebridgePluginUiServer {
         return { scene, offline: true };
       },
       'POST /scenes/reorder': async () => {
+        if (!Array.isArray(body?.ids)) {
+          throw new RequestError(t('error.idsNotAList'), { status: 400 });
+        }
         this.store.load();
-        this.store.reorder(body?.ids || []);
+        this.store.reorder(body.ids);
         await this.store.save();
         return { scenes: this.store.list(), offline: true };
       },

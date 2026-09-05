@@ -338,12 +338,19 @@ class ControlApi {
 
     // --------------------------------------------------------------- library
     if (route === 'GET /library') {
-      const library = await system.getLibrary({ force: url.searchParams.get('force') === '1' });
+      const library = await system.getLibrary({
+        force: url.searchParams.get('force') === '1',
+        // `wait=0` is the settings page opening: show what there is, now.
+        wait: url.searchParams.get('wait') !== '0',
+      });
       this._send(response, 200, {
         favorites: library.favorites.map(trimItem),
         playlists: library.playlists.map(trimItem),
         radio: library.radio.map(trimItem),
         fetchedAt: library.fetchedAt,
+        // False only in the first seconds after the bridge starts, before the
+        // household has been browsed. The settings page reads it and asks again.
+        loaded: library.loaded === true,
       });
       return;
     }
@@ -422,7 +429,17 @@ class ControlApi {
     }
 
     if (route === 'POST /scenes/reorder') {
-      platform.store.reorder(body.ids || []);
+      // A reorder with no list is not a reorder. `body.ids || []` accepted one,
+      // renumbered the scenes in the order they already had, wrote the file and
+      // took a backup — a save for nothing, and a 200 for a request that said
+      // nothing. Ids the store does not know are still skipped inside
+      // `reorder()`: a page that dragged a list a moment before someone else
+      // deleted one scene should still get the other nine in the order it asked.
+      if (!Array.isArray(body.ids)) {
+        this._send(response, 400, { error: t('error.idsNotAList') });
+        return;
+      }
+      platform.store.reorder(body.ids);
       await platform.store.save();
       this._send(response, 200, { scenes: platform.store.list() });
       return;

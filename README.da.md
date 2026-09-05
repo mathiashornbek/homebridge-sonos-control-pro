@@ -147,7 +147,7 @@ Alt destruktivt spørger først — og giver dig **alligevel** en Fortryd bageft
   <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/backup.png" width="760" alt="Skabeloner, eksport/import og backups" />
 </p>
 
-Start ikke på en tom side. Tryk **Hent de fire startscener**, og du har med det samme fire kontakter der virker — **Musik i hele huset**, **Pause alt**, **Skru op**, **Skru ned** — allerede koblet til *dine* højttalere, fordi skabelonen fylder sig selv ud fra din live husstand. 🪄
+Start ikke på en tom side. Tryk **Hent de seks startscener**, og du har med det samme seks kontakter der virker — **Musik i hele huset**, **Pause alt**, **Skru op**, **Skru ned**, **Næste nummer**, **Forrige nummer** — allerede koblet til *dine* højttalere, fordi skabelonen fylder sig selv ud fra din live husstand. 🪄
 
 Under **Import & backup → Kom godt i gang** vælger du **Indlæs og erstat alt** eller **Tilføj ved siden af mine scener**. Bagefter er de helt almindelige scener: ret dem til præcis det, du gerne vil have. Og enhver scene kan **dubleres** med ét klik, så "det samme igen, bare ovenpå" er ti sekunders arbejde. 📋
 
@@ -311,7 +311,7 @@ Indstillingssiden viser to felter med vilje. Disse læses stadig fra `config.jso
 Issues og pull requests er meget velkomne. Testsuiten er kontrakten:
 
 ```bash
-npm test        # 190 tests mod en komplet efterligning af en Sonos-husstand
+npm test        # 215 tests mod en komplet efterligning af en Sonos-husstand
 npm run test:ui # 114 kontroller der styrer den rigtige brugerflade i Chromium
 ```
 

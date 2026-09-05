@@ -72,6 +72,9 @@ class SonosSystem extends EventEmitter {
    * @param {number} [options.discoveryTimeout]
    * @param {number} [options.topologyIntervalMs]
    * @param {number} [options.libraryTtlMs]
+   * @param {number} [options.describeTimeoutMs] How long to wait for one
+   *   speaker's device description during discovery. A speaker that is off
+   *   costs this much on every sweep; the suite sets it low.
    */
   constructor({
     log,
@@ -79,6 +82,7 @@ class SonosSystem extends EventEmitter {
     discoveryTimeout = 4000,
     topologyIntervalMs = 30000,
     libraryTtlMs = 300000,
+    describeTimeoutMs = 4000,
     port,
     discoverFn = discover,
   } = {}) {
@@ -98,6 +102,7 @@ class SonosSystem extends EventEmitter {
     this.discoveryTimeout = discoveryTimeout;
     this.topologyIntervalMs = topologyIntervalMs;
     this.libraryTtlMs = libraryTtlMs;
+    this.describeTimeoutMs = describeTimeoutMs;
 
     /** @type {Map<string, SonosPlayer>} keyed by UUID */
     this.players = new Map();
@@ -284,7 +289,7 @@ class SonosSystem extends EventEmitter {
       const described = await Promise.allSettled(
         [...targets.values()].map(async ({ host, port }) => {
           const player = new SonosPlayer({ host, port });
-          await player.describe(4000);
+          await player.describe(this.describeTimeoutMs);
           return player;
         }),
       );
@@ -700,17 +705,43 @@ class SonosSystem extends EventEmitter {
   /**
    * Favourites, playlists and radio stations. Cached, because browsing takes
    * a few hundred milliseconds and the answer barely ever changes.
-   * @param {{force?: boolean}} [options]
+   *
+   * A copy that has gone past its time is still handed back at once, and a
+   * fresh one fetched behind it. Waiting instead meant the settings page could
+   * not open until three Browse calls had come back — a few hundred
+   * milliseconds when the speaker asked is awake, and nine and a half seconds
+   * when it is not — for a list that had not changed since last time. Nobody
+   * adds a favourite in the five minutes between two visits and needs to see
+   * it before the page appears; they see it on the next refresh.
+   *
+   * `force` still waits: that is the refresh button, and "I asked for a new
+   * list" should mean the list that comes back is new. `wait: false` never
+   * does, not even before the first fetch has finished — it hands back what
+   * there is, starts the fetch, and lets the caller ask again.
+   *
+   * @param {{force?: boolean, wait?: boolean}} [options]
    */
-  async getLibrary({ force = false } = {}) {
+  async getLibrary({ force = false, wait = true } = {}) {
     const fresh = Date.now() - this._library.fetchedAt < this.libraryTtlMs;
     // Gate on "have we loaded it", not "did it contain favourites" — a house
     // that only uses playlists would otherwise re-browse everything every time.
     if (!force && fresh && this._library.loaded) return this._library;
-    if (this._libraryPromise) return this._libraryPromise;
+    if (!force && (this._library.loaded || !wait)) {
+      this._fetchLibrary().catch(() => {});
+      return this._library;
+    }
+    return this._fetchLibrary();
+  }
 
+  /** @private Browse the household once, sharing one request between callers. */
+  _fetchLibrary() {
+    if (this._libraryPromise) return this._libraryPromise;
     this._libraryPromise = (async () => {
-      const source = this.list()[0];
+      // Ask whoever answered the topology last. The first speaker by name was
+      // asked before, and when that one is asleep every library fetch waited
+      // out its timeout — while thirteen others would have answered at once.
+      const source =
+        (this._topologySource && this.players.get(this._topologySource.uuid)) || this.list()[0];
       if (!source) return this._library;
       const [favorites, playlists, radio] = await Promise.all([
         source.getFavorites().catch(() => []),
@@ -723,7 +754,6 @@ class SonosSystem extends EventEmitter {
     })().finally(() => {
       this._libraryPromise = null;
     });
-
     return this._libraryPromise;
   }
 
@@ -782,6 +812,13 @@ class SonosSystem extends EventEmitter {
 
     await this.refreshTopology(undefined, { maxAgeMs: 2000 }).catch(() => {});
 
+    // This is a glance, not a command. A speaker that is there answers in tens
+    // of milliseconds; one that has not answered in over a second is asleep or
+    // unplugged, and a second attempt would only make the page wait for it
+    // twice. Scenes keep the patient timeouts — they are trying to make
+    // something happen. A status read is not.
+    const glance = { timeout: 1200, retry: false };
+
     // One transport read per group.
     const coordinators = new Map();
     for (const player of this.list()) {
@@ -789,38 +826,42 @@ class SonosSystem extends EventEmitter {
       if (!coordinators.has(coordinator.uuid)) coordinators.set(coordinator.uuid, coordinator);
     }
 
+    // Group state and per-speaker levels have nothing to do with each other,
+    // so they are asked for at the same time. One after the other, a sleeping
+    // speaker held the page for two full waits rather than one.
     const groupState = new Map();
-    await Promise.all(
-      [...coordinators.values()].map(async (coordinator) => {
-        const [transport, position] = await Promise.all([
-          coordinator.getTransportInfo().catch(() => null),
-          coordinator.getPositionInfo().catch(() => null),
-        ]);
-        const state = transport?.state || null;
-        const playing = state === 'PLAYING' || state === 'TRANSITIONING';
-        groupState.set(coordinator.uuid, {
-          state,
-          playing,
-          title: playing ? position?.title || '' : '',
-          artist: playing ? position?.artist || '' : '',
-          albumArt: playing ? position?.albumArt || '' : '',
-        });
-      }),
-    );
-
-    // Volume and mute are genuinely per speaker — and genuinely independent of
-    // each other, so they go out together. Awaiting them one after the other
-    // inside an object literal looks parallel and is not: an unreachable
-    // speaker used to cost two timeouts instead of one.
-    const levels = await Promise.all(
-      players.map(async (player) => {
-        const [volume, muted] = await Promise.all([
-          player.getVolume().catch(() => null),
-          player.getMute().catch(() => null),
-        ]);
-        return { volume, muted };
-      }),
-    );
+    const [, levels] = await Promise.all([
+      Promise.all(
+        [...coordinators.values()].map(async (coordinator) => {
+          const [transport, position] = await Promise.all([
+            coordinator.getTransportInfo(glance).catch(() => null),
+            coordinator.getPositionInfo(glance).catch(() => null),
+          ]);
+          const state = transport?.state || null;
+          const playing = state === 'PLAYING' || state === 'TRANSITIONING';
+          groupState.set(coordinator.uuid, {
+            state,
+            playing,
+            title: playing ? position?.title || '' : '',
+            artist: playing ? position?.artist || '' : '',
+            albumArt: playing ? position?.albumArt || '' : '',
+          });
+        }),
+      ),
+      // Volume and mute are genuinely per speaker — and genuinely independent
+      // of each other, so they go out together. Awaiting them one after the
+      // other inside an object literal looks parallel and is not: an
+      // unreachable speaker used to cost two timeouts instead of one.
+      Promise.all(
+        players.map(async (player) => {
+          const [volume, muted] = await Promise.all([
+            player.getVolume(glance).catch(() => null),
+            player.getMute(glance).catch(() => null),
+          ]);
+          return { volume, muted };
+        }),
+      ),
+    ]);
 
     return base.map((entry, index) => {
       const group = groupState.get(entry.coordinatorUuid) || groupState.get(entry.uuid) || {};

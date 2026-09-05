@@ -147,7 +147,7 @@ Every destructive action asks first — and then **still** gives you an Undo. �
   <img src="https://raw.githubusercontent.com/mathiashornbek/homebridge-sonos-control-pro/main/docs/screenshots/backup.png" width="760" alt="Templates, export/import and backups" />
 </p>
 
-Don't start from an empty page. Press **Load the four starter scenes** and you instantly get four working switches — **Music everywhere**, **Pause everything**, **Turn up**, **Turn down** — already wired to *your* speakers, because the template hydrates itself from your live household. 🪄
+Don't start from an empty page. Press **Load the six starter scenes** and you instantly get six working switches — **Music everywhere**, **Pause everything**, **Turn up**, **Turn down**, **Next track**, **Previous track** — already wired to *your* speakers, because the template hydrates itself from your live household. 🪄
 
 Under **Import & backup → Getting started** you choose **Load and replace everything** or **Add alongside my scenes**. They are ordinary scenes afterwards: edit them into whatever you actually want. And any scene can be **duplicated** with one click, so "same again, but the upstairs" is a ten-second job. 📋
 
@@ -311,7 +311,7 @@ The settings page shows two fields on purpose. These are still read from `config
 Issues and pull requests are very welcome. The test suite is the contract:
 
 ```bash
-npm test        # 190 unit and integration tests against a full mock Sonos household
+npm test        # 215 unit and integration tests against a full mock Sonos household
 npm run test:ui # 114 checks driving the real settings UI in Chromium
 ```
 

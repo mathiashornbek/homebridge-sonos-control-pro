@@ -7,157 +7,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 
-const { MockHousehold, quietLog } = require('./mock-sonos');
-const { SonosSystem } = require('../src/sonos/system');
-const { SceneRunner } = require('../src/engine/runner');
+const { quietLog } = require('./mock-sonos');
 const { SceneStore } = require('../src/store');
 const { ControlApi } = require('../src/api');
 const { RUNTIME_FILE, STATE_DIR } = require('../src/settings');
 const preset = require('../src/presets/starter');
 const fixture = require('./fixtures/household');
-
-const ROOMS = ['Kitchen', 'Pantry', 'Living Room', 'Study'];
-
-async function apiHarness() {
-  const household = new MockHousehold(ROOMS);
-  household.favorites = [{ title: 'City Radio', description: 'DR LYD', uri: 'x-sonosapi-hls:city-radio', container: false }];
-  await household.listen();
-
-  const system = new SonosSystem({
-    log: quietLog,
-    // Each mock player answers on its own port on 127.0.0.1, so the seed
-    // has to name the port — the same "host:port" form a real config accepts.
-    seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
-    discoveryTimeout: 150,
-    // The mock household only, never the machine's real network. See engine.test.js.
-    discoverFn: async () => [],
-  });
-  await system.discover({ force: true });
-
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sf-api-'));
-  const store = new SceneStore({ storagePath: dir, log: quietLog });
-  store.load();
-  const runner = new SceneRunner({ system, log: quietLog, getScenes: () => store.scenes });
-
-  const platform = {
-    version: '1.0.0-test',
-    startedAt: Date.now(),
-    system,
-    store,
-    runner,
-    syncAccessories() {
-      platform.syncCount = (platform.syncCount || 0) + 1;
-    },
-    testContext: () => ({
-      system,
-      log: quietLog,
-      signal: new AbortController().signal,
-      snapshots: runner.snapshots,
-      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-      runScene: async () => 'x',
-    }),
-    unconfiguredPlayers() {
-      const known = new Set();
-      for (const scene of store.list()) {
-        for (const step of scene.steps || []) {
-          for (const name of Object.keys(step.params?.volumes || {})) known.add(name);
-          for (const name of step.target?.names || []) known.add(name);
-        }
-      }
-      return system.list().map((player) => player.name).filter((name) => !known.has(name));
-    },
-    async adoptPlayers(names, volume) {
-      const rooms = names.map((name) => system.resolve(name)?.name).filter(Boolean);
-      const touched = [];
-      for (const scene of store.list()) {
-        let changed = false;
-        for (const step of scene.steps || []) {
-          if (step.action !== 'groupAndPlay') continue;
-          if (Object.keys(step.params.volumes || {}).length === 0) continue;
-          for (const room of rooms) {
-            if (room === step.params.coordinator) continue;
-            step.params.volumes = { ...step.params.volumes, [room]: Number(volume) };
-            changed = true;
-          }
-        }
-        if (changed) {
-          store.upsert(scene);
-          touched.push(scene.name);
-        }
-      }
-      await store.save();
-      return { rooms, scenes: touched, scenesList: store.list() };
-    },
-    config: {},
-    async setPlayerIps(value) {
-      const hosts = String(value || '')
-        .split(/[\s,;]+/)
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-      platform.config.playerIps = hosts.join(', ');
-      system.seedHosts = hosts;
-      await system.discover({ force: true });
-      return { hosts, found: system.list().length };
-    },
-    listPresets: () => require('../src/presets').listPresets(),
-    applyPreset: async (id, options) => {
-      const found = require('../src/presets').getPreset(id);
-      const scenes = JSON.parse(JSON.stringify(found.scenes));
-      found.hydrate?.(scenes, system);
-      if (options.mode === 'replace') store.replaceAll(scenes);
-      else store.merge(scenes);
-      await store.save();
-      return { scenes: store.list(), applied: scenes.length, validation: {} };
-    },
-  };
-
-  const control = new ControlApi({ platform, storagePath: dir, port: 0, log: quietLog });
-  await control.start();
-
-  const call = (method, route, body) =>
-    new Promise((resolve, reject) => {
-      const payload = body === undefined ? '' : JSON.stringify(body);
-      const request = http.request(
-        {
-          host: '127.0.0.1',
-          port: control.actualPort,
-          path: route,
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(payload),
-            'x-sf-token': control.token,
-          },
-        },
-        (response) => {
-          const chunks = [];
-          response.on('data', (chunk) => chunks.push(chunk));
-          response.on('end', () =>
-            resolve({ status: response.statusCode, body: JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') }),
-          );
-        },
-      );
-      request.on('error', reject);
-      request.end(payload);
-    });
-
-  return {
-    household,
-    system,
-    store,
-    platform,
-    control,
-    call,
-    dir,
-    async close() {
-      control.stop();
-      runner.cancelAll();
-      system.stop();
-      await household.close();
-      fs.rmSync(dir, { recursive: true, force: true });
-    },
-  };
-}
+const { apiHarness, ROOMS } = require('./api-harness');
 
 test('the control API rejects a request without the token', async (t) => {
   const h = await apiHarness();
@@ -242,6 +98,33 @@ test('scenes can be created, run and deleted over the API', async (t) => {
   assert.equal(removed.body.scenes.length, 0);
 });
 
+test('a reorder with no list is refused, and one with a stale id still works', async (t) => {
+  const h = await apiHarness();
+  t.after(() => h.close());
+
+  await h.call('POST', '/scenes', { scene: { name: 'A' } });
+  await h.call('POST', '/scenes', { scene: { name: 'B' } });
+  const [a, b] = (await h.call('GET', '/scenes')).body.scenes;
+
+  // `body.ids || []` used to accept a request that said nothing, renumber the
+  // scenes in the order they already had, and write the file — a save and a
+  // backup for a request that was not one.
+  for (const body of [{}, { ids: 'a,b' }, { ids: null }]) {
+    const answer = await h.call('POST', '/scenes/reorder', body);
+    assert.equal(answer.status, 400, JSON.stringify(body));
+  }
+
+  // But an id the store does not know is skipped, not refused. The page that
+  // dragged the list a moment before somebody else deleted a scene should still
+  // get the rest in the order it asked for.
+  const reordered = await h.call('POST', '/scenes/reorder', { ids: [b.id, 'gone', a.id] });
+  assert.equal(reordered.status, 200);
+  assert.deepEqual(
+    reordered.body.scenes.map((scene) => scene.name),
+    ['B', 'A'],
+  );
+});
+
 // These four read `body.id` and did nothing with it. A request that named no
 // scene reported success having done nothing, and an id for a scene deleted in
 // another tab came back as a 500 — which the settings page reads as "the bridge
@@ -305,7 +188,7 @@ test('the starter preset loads through the API and fills in the group leader', a
   t.after(() => h.close());
 
   const applied = await h.call('POST', '/presets/apply', { id: preset.id, mode: 'replace' });
-  assert.equal(applied.body.applied, 4);
+  assert.equal(applied.body.applied, preset.scenes.length);
   const names = applied.body.scenes.map((scene) => scene.name);
   assert.deepEqual(names, preset.scenes.map((scene) => scene.name));
 

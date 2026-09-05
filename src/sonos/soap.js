@@ -187,7 +187,18 @@ async function soapRequest(options) {
     return await sendSoap({ ...options, timeout });
   } catch (error) {
     const noAnswer = error?.upnpErrorCode === undefined && error?.statusCode === undefined;
-    if (!noAnswer || error?.aborted || !RETRYABLE.has(action) || options.signal?.aborted) throw error;
+    // `retry: false` is for a glance, not a command: a status read for the
+    // settings page has nothing to gain from a second wait on a speaker that
+    // did not answer the first one.
+    if (
+      !noAnswer ||
+      error?.aborted ||
+      options.retry === false ||
+      !RETRYABLE.has(action) ||
+      options.signal?.aborted
+    ) {
+      throw error;
+    }
     // A player that is actually there answers in tens of milliseconds, so the
     // second attempt gets a short leash: a transient drop recovers at once,
     // and a speaker that is genuinely off costs less than the first wait did.

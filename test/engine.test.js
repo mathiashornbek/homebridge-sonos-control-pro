@@ -1645,6 +1645,17 @@ test('a topology that nobody answers is not re-attempted on every call', async (
   const h = await harness();
   t.after(() => h.close());
 
+  // The test is about the guard, not about how long a topology request is
+  // given. At the real five seconds plus a retry, across a source and thirteen
+  // alternates, this one test took thirteen seconds — two thirds of the whole
+  // suite. The proportions it checks are the same at a tenth of a second.
+  const { SLOW_ACTIONS } = require('../src/sonos/soap');
+  const patient = SLOW_ACTIONS.GetZoneGroupState;
+  SLOW_ACTIONS.GetZoneGroupState = 100;
+  t.after(() => {
+    SLOW_ACTIONS.GetZoneGroupState = patient;
+  });
+
   // Everyone stops answering.
   h.household.failEverything = true;
 

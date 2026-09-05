@@ -177,8 +177,8 @@ class SonosPlayer {
    * @returns {Promise<{state: string, status: string}>} `state` is one of
    * PLAYING / PAUSED_PLAYBACK / STOPPED / TRANSITIONING.
    */
-  async getTransportInfo() {
-    const response = await this._call('AVTransport', 'GetTransportInfo', { InstanceID: 0 });
+  async getTransportInfo(options = {}) {
+    const response = await this._call('AVTransport', 'GetTransportInfo', { InstanceID: 0 }, options);
     return {
       state: text(response, 'CurrentTransportState', 'STOPPED'),
       status: text(response, 'CurrentTransportStatus', ''),
@@ -200,8 +200,8 @@ class SonosPlayer {
     };
   }
 
-  async getPositionInfo() {
-    const response = await this._call('AVTransport', 'GetPositionInfo', { InstanceID: 0 });
+  async getPositionInfo(options = {}) {
+    const response = await this._call('AVTransport', 'GetPositionInfo', { InstanceID: 0 }, options);
     const metadata = text(response, 'TrackMetaData', '');
     const [item] = metadata && metadata !== 'NOT_IMPLEMENTED' ? parseDidl(metadata) : [];
     return {
@@ -305,11 +305,13 @@ class SonosPlayer {
 
   // ------------------------------------------------------------------ volume
 
-  async getVolume() {
-    const response = await this._call('RenderingControl', 'GetVolume', {
-      InstanceID: 0,
-      Channel: 'Master',
-    });
+  async getVolume(options = {}) {
+    const response = await this._call(
+      'RenderingControl',
+      'GetVolume',
+      { InstanceID: 0, Channel: 'Master' },
+      options,
+    );
     return Number(text(response, 'CurrentVolume', '0')) || 0;
   }
 
@@ -336,11 +338,13 @@ class SonosPlayer {
     return Number(text(response, 'NewVolume', '0')) || 0;
   }
 
-  async getMute() {
-    const response = await this._call('RenderingControl', 'GetMute', {
-      InstanceID: 0,
-      Channel: 'Master',
-    });
+  async getMute(options = {}) {
+    const response = await this._call(
+      'RenderingControl',
+      'GetMute',
+      { InstanceID: 0, Channel: 'Master' },
+      options,
+    );
     return text(response, 'CurrentMute', '0') === '1';
   }
 

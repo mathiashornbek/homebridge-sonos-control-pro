@@ -380,7 +380,8 @@ check('kortene flugter med toppen', Math.abs(insets.left - insets.cardLeft) <= 1
 // The starter preset, straight from the empty state.
 await page.click('[data-act="apply-preset"]');
 await page.waitForTimeout(400);
-check("startpresettet indlæser fire scener", (await page.$$('.sf-scene')).length === 4,
+const starterCount = getPreset('starter').scenes.length;
+check(`startpresettet indlæser alle ${starterCount} scener`, (await page.$$('.sf-scene')).length === starterCount,
   `fik ${(await page.$$('.sf-scene')).length}`);
 const starterNames = await page.$$eval('.sf-scene h3', (nodes) => nodes.map((node) => node.textContent));
 check('startscenerne hedder det rigtige',
@@ -791,6 +792,7 @@ check('fortryd bevarer trinnene', restored.steps[0].params.delta === -10, JSON.s
 // all three carry an action the code used to drop the oldest anyway — so the
 // fourth delete quietly withdrew the first scene's only way back.
 await page.evaluate(() => document.querySelectorAll('.sf-toast').forEach((node) => node.remove()));
+const beforeDeleting = (await page.$$('.sf-scene')).length;
 const doomed = (await page.$$eval('.sf-scene', (nodes) => nodes.map((node) => node.dataset.id))).slice(0, 4);
 for (const id of doomed) {
   await page.click(`.sf-scene[data-id="${id}"] [data-act="delete"]`);
@@ -805,7 +807,7 @@ for (const button of (await page.$$('.sf-toast-action')).reverse()) {
   await button.click();
   await page.waitForTimeout(200);
 }
-check('alle fire kom tilbage', (await page.$$('.sf-scene')).length === 8,
+check('alle fire kom tilbage', (await page.$$('.sf-scene')).length === beforeDeleting,
   `fandt ${(await page.$$('.sf-scene')).length}`);
 await page.evaluate(() => document.querySelectorAll('.sf-toast').forEach((node) => node.remove()));
 

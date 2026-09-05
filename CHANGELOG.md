@@ -8,6 +8,58 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.6.0
+
+The settings page opens at once, whatever the speakers are doing. Measured on
+a household of fourteen with one speaker asleep: the page went from blank for
+eight seconds to usable in thirty milliseconds.
+
+- **The page no longer waits for the speakers before it draws.** `/bootstrap`
+  used to ask every speaker for its volume and playback state and browse the
+  library, and could not show a single scene until the slowest had answered.
+  A speaker that is off never answers; it times out, twice. Now the page draws
+  from what the bridge already knows — scenes, catalogue, speaker list, cached
+  library — and asks for the rest once it is on screen. A slow speaker delays
+  its own card and nothing else.
+- **A status read is a glance, not a command.** Volume and playback for the
+  Sonos tab are asked for with a 1.2 s wait and no retry. A speaker that is
+  there answers in tens of milliseconds; one that has not answered in over a
+  second is asleep, and a second attempt only made the page wait for it twice.
+  Scenes keep the patient timeouts — they are trying to make something happen.
+- **Group state and speaker levels are fetched at the same time.** They have
+  nothing to do with each other, and one after the other a sleeping speaker
+  cost two full waits instead of one.
+- **The library is handed back from its cache and refreshed behind.** After
+  its five minutes it was re-browsed while the page waited — three Browse
+  calls, up to nine and a half seconds when the speaker asked was asleep — for
+  a list that had not changed. The refresh button still waits, because "I asked
+  for a new list" should mean the list is new.
+- **The library is fetched from whoever answered last,** the way the topology
+  already was, instead of the first speaker by name — which, when that one was
+  asleep, cost a timeout on every fetch while thirteen others would have
+  answered at once.
+- **Two more starter scenes: Next track and Previous track.** They skip in every
+  group that is playing and leave silent rooms alone, the same way Turn up and
+  Turn down work. The editor has icons for them.
+- `POST /scenes/reorder` without a list is a bad request now. It used to be
+  accepted, renumber the scenes in the order they already had, save and take a
+  backup — for a request that said nothing. Ids the store does not know are
+  still skipped rather than refused, so a page that dragged the list a moment
+  before somebody else deleted a scene gets the rest in the order it asked.
+- **The settings-UI server has tests.** It is run the way Homebridge runs it —
+  as a child process over IPC — and asked what the page asks it: to open with a
+  speaker asleep, to open with the bridge stopped, and to refuse what it should.
+- **The two READMEs are held to each other.** Same sections in the same order,
+  same links, every action in the toolbox, the right test counts, and the
+  starter scenes named — a test fails when one is edited and the other is not.
+- The suite runs in six seconds instead of nineteen. Two tests were waiting out
+  real timeouts to check a proportion that holds at a tenth of the length.
+- `npm run bench` measures the two things above — the bridge's answer times and
+  the page's time to first paint — so the next change to either is measured
+  rather than guessed.
+
+---
+
 ## 3.5.1
 
 - **A renamed scene kept warning about the name it used to have.** A HAP service

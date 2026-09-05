@@ -105,6 +105,24 @@ function buildScenes() {
       ],
       600,
     ),
+
+    // Skip, the same way the volume scenes work: only where something is
+    // playing, so a silent room is not woken by a button meant for another.
+    scene(
+      t('preset.starter.nextTrack'),
+      t('preset.starter.nextTrackHelp'),
+      'skip-forward',
+      [step('next', { target: { type: 'all', names: [], coordinator: '', filter: 'playing' } })],
+      600,
+    ),
+
+    scene(
+      t('preset.starter.previousTrack'),
+      t('preset.starter.previousTrackHelp'),
+      'skip-back',
+      [step('previous', { target: { type: 'all', names: [], coordinator: '', filter: 'playing' } })],
+      600,
+    ),
   ];
 }
 

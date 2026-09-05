@@ -74,6 +74,14 @@ class MockHousehold {
     this.latencyMs = 0;
     /** Accept every request and answer none of them. */
     this.failEverything = false;
+    /**
+     * Speakers that accept the connection and never answer — one that is
+     * asleep, unplugged at the wall, or on the far side of a dead switch — by
+     * name. The rest of the household carries on as normal, which is exactly
+     * the situation the plugin's timeouts exist for.
+     * @type {Set<string>}
+     */
+    this.asleep = new Set();
     /** Per-action overrides, e.g. a slow Spotify enqueue. */
     this.actionLatencyMs = {};
   }
@@ -200,7 +208,7 @@ class MockHousehold {
       // router rebooting, a firmware push, a switch that has lost power. The
       // plugin's timeouts are what has to cope, so the mock has to be able to
       // stop answering without also closing the socket.
-      if (this.failEverything) return;
+      if (this.failEverything || this.asleep.has(player.name)) return;
       const delay = this.actionLatencyMs[soapActionName] ?? this.latencyMs;
       if (delay > 0) {
         setTimeout(() => this._respond(player, request, response, body), delay);

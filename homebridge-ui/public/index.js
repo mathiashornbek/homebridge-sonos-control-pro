@@ -371,6 +371,8 @@ const ICONS = {
   radio: '<circle cx="12" cy="12" r="2"/><path d="M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4"/>',
   flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
   pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  'skip-forward': '<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>',
+  'skip-back': '<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   'volume-up': '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>',
   'volume-down': '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>',
@@ -382,7 +384,7 @@ const ICONS = {
   home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
 };
 
-const ICON_CHOICES = ['music', 'radio', 'flame', 'pause', 'link', 'volume-up', 'volume-down', 'speaker', 'moon', 'sun', 'party', 'bell', 'home'];
+const ICON_CHOICES = ['music', 'radio', 'flame', 'pause', 'skip-forward', 'skip-back', 'link', 'volume-up', 'volume-down', 'speaker', 'moon', 'sun', 'party', 'bell', 'home'];
 
 function icon(name, size = 18) {
   const body = ICONS[name] || ICONS.music;
@@ -434,10 +436,35 @@ async function bootstrap({ quiet = false } = {}) {
     applyStaticText();
     renderLanguagePicker();
     renderAll();
+    // The page is on screen. Now the parts that mean asking the speakers:
+    // volume and playback for the Sonos tab, and the library if the bridge had
+    // not browsed it yet. Both used to be part of the answer above, and the
+    // scene list — what most people open this page for — waited behind them.
+    fillInFromSpeakers(data);
   } catch (error) {
     toast(error.message, 'error', 8000);
   } finally {
     if (!quiet) homebridge.hideSpinner();
+  }
+}
+
+/**
+ * Fetch what bootstrap deliberately left out, and paint it as it arrives.
+ * Nothing here is awaited by the caller; a slow speaker delays its own card
+ * and nothing else.
+ */
+function fillInFromSpeakers(data) {
+  if (!state.connected) return;
+  refreshPlayers();
+  if (data.library && data.library.loaded === false) {
+    api('GET', '/library', undefined, { silent: true })
+      .then((library) => {
+        state.library = library;
+        renderLibrary();
+      })
+      .catch(() => {
+        /* the tab keeps its "reload" button for exactly this */
+      });
   }
 }
 
