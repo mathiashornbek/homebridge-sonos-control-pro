@@ -66,6 +66,10 @@ class MockHousehold {
     this.radio = [];
     this.servers = [];
     this.failures = new Map();
+    /** `name:action` → ms, see `slowFor()`. */
+    this.slow = new Map();
+    /** `name:action` → ms, see `answerLateFor()`. */
+    this.answerLate = new Map();
     /**
      * Simulated network delay. Zero by default so the suite stays fast, but a
      * test that is about ordering needs it: with instant replies, a cancelled
@@ -139,7 +143,41 @@ class MockHousehold {
 
   /** Make one action on one player fail, to test error handling. */
   failOn(playerName, action, upnpErrorCode = 501) {
-    this.failures.set(`${playerName}:${action}`, upnpErrorCode);
+    this.failures.set(`${playerName}:${action}`, { code: upnpErrorCode, remaining: Infinity });
+  }
+
+  /**
+   * Make one action on one player fail the next `times` times, then work.
+   *
+   * A music service whose session has lapsed refuses the first request and
+   * accepts the next; a speaker mid-reboot answers the first Browse with an
+   * error and the second normally. Whether the plugin recovers from that, or
+   * remembers the failure for five minutes, is what this is for.
+   */
+  failOnce(playerName, action, upnpErrorCode = 501, times = 1) {
+    this.failures.set(`${playerName}:${action}`, { code: upnpErrorCode, remaining: times });
+  }
+
+  /**
+   * Make one action on one player take `ms` to answer, and nobody else.
+   *
+   * This is what loading a cloud stream looks like on a cold speaker: the one
+   * being asked to resolve the source is slow, every other speaker in the house
+   * answers at once. Household-wide `latencyMs` cannot describe that.
+   */
+  slowFor(playerName, action, ms) {
+    this.slow.set(`${playerName}:${action}`, ms);
+  }
+
+  /**
+   * Make one action on one player *happen* at once but be *answered* after
+   * `ms` — the state changes now, the reply arrives late or, from the caller's
+   * point of view, not at all. That is a set command whose acknowledgement was
+   * lost, and whether the plugin then believes the speaker or its own timeout
+   * is the difference between music and silence.
+   */
+  answerLateFor(playerName, action, ms) {
+    this.answerLate.set(`${playerName}:${action}`, ms);
   }
 
   async listen() {
@@ -209,7 +247,19 @@ class MockHousehold {
       // plugin's timeouts are what has to cope, so the mock has to be able to
       // stop answering without also closing the socket.
       if (this.failEverything || this.asleep.has(player.name)) return;
-      const delay = this.actionLatencyMs[soapActionName] ?? this.latencyMs;
+      // The speaker does the work now and answers later — the answer got lost,
+      // or came after the caller had stopped listening. Distinct from `slow`,
+      // where nothing happens until the answer does.
+      const late = this.answerLate.get(`${player.name}:${soapActionName}`);
+      if (late !== undefined) {
+        const answer = this._answer(player, request, body);
+        setTimeout(() => send(response, answer.status, answer.body), late);
+        return;
+      }
+      const delay =
+        this.slow.get(`${player.name}:${soapActionName}`) ??
+        this.actionLatencyMs[soapActionName] ??
+        this.latencyMs;
       if (delay > 0) {
         setTimeout(() => this._respond(player, request, response, body), delay);
         return;
@@ -220,11 +270,17 @@ class MockHousehold {
 
   /** @private */
   _respond(player, request, response, body) {
+    const answer = this._answer(player, request, body);
+    return send(response, answer.status, answer.body);
+  }
+
+  /** @private Work out the reply — and apply whatever the request does — without sending it. */
+  _answer(player, request, body) {
+    const send = (status, text) => ({ status, body: text });
     {
 
       if (request.method === 'GET' && request.url === '/xml/device_description.xml') {
         return send(
-          response,
           200,
           `<?xml version="1.0"?><root xmlns="urn:schemas-upnp-org:device-1-0"><device>` +
             `<UDN>uuid:${player.uuid}</UDN><roomName>${escapeXml(player.name)}</roomName>` +
@@ -243,24 +299,19 @@ class MockHousehold {
       player.calls.push({ action, args: { ...args } });
 
       const failure = this.failures.get(`${player.name}:${action}`);
-      if (failure) {
-        return send(
-          response,
-          500,
-          `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault>` +
-            `<faultstring>UPnPError</faultstring><detail><UPnPError xmlns="urn:schemas-upnp-org:control-1-0">` +
-            `<errorCode>${failure}</errorCode></UPnPError></detail></s:Fault></s:Body></s:Envelope>`,
-        );
+      if (failure && failure.remaining > 0) {
+        failure.remaining -= 1;
+        if (failure.remaining <= 0) this.failures.delete(`${player.name}:${action}`);
+        return send(500, fault(failure.code));
       }
 
       const result = this.execute(player, action, args);
       if (result && typeof result === 'object' && result.fault) {
-        return send(response, 500, fault(result.fault));
+        return send(500, fault(result.fault));
       }
-      if (result === undefined) return send(response, 500, fault(401));
+      if (result === undefined) return send(500, fault(401));
 
       return send(
-        response,
         200,
         `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>` +
           `<u:${action}Response xmlns:u="urn:schemas-upnp-org:service:Mock:1">${result}</u:${action}Response>` +

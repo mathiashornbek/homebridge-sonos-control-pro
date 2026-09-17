@@ -1,9 +1,26 @@
 'use strict';
 
-const { soapRequest, httpGet, SONOS_PORT } = require('./soap');
+const { soapRequest, httpGet, SONOS_PORT, SLOW_ACTIONS } = require('./soap');
 const { parseXml, find, text } = require('./xml');
 const { parseDidl, buildDidl, classify, isFavoriteWrapper } = require('./didl');
 const { t } = require('../i18n');
+
+/**
+ * What a source URI names, with the scheme, the query string and the encoding
+ * taken off: `x-sonosapi-stream:urn%3Adr%3Aradio%3A…?sid=290` and the
+ * `x-sonosapi-hls:urn%3adr%3aradio%3a…?sid=290&flags=…` the speaker turns it
+ * into both come out as `urn:dr:radio:…`.
+ * @param {string} uri
+ */
+function sourceKey(uri) {
+  const text = String(uri || '');
+  const body = text.slice(text.indexOf(':') + 1).split('?')[0];
+  try {
+    return decodeURIComponent(body).toLowerCase();
+  } catch {
+    return body.toLowerCase();
+  }
+}
 
 const PLAY_MODES = {
   normal: 'NORMAL',
@@ -191,8 +208,8 @@ class SonosPlayer {
     return info.state === 'PLAYING' || info.state === 'TRANSITIONING';
   }
 
-  async getMediaInfo() {
-    const response = await this._call('AVTransport', 'GetMediaInfo', { InstanceID: 0 });
+  async getMediaInfo(options = {}) {
+    const response = await this._call('AVTransport', 'GetMediaInfo', { InstanceID: 0 }, options);
     return {
       uri: text(response, 'CurrentURI', ''),
       metadata: text(response, 'CurrentURIMetaData', ''),
@@ -216,12 +233,13 @@ class SonosPlayer {
     };
   }
 
-  setAVTransportURI(uri, metadata = '') {
-    return this._call('AVTransport', 'SetAVTransportURI', {
-      InstanceID: 0,
-      CurrentURI: uri,
-      CurrentURIMetaData: metadata,
-    });
+  setAVTransportURI(uri, metadata = '', options = {}) {
+    return this._call(
+      'AVTransport',
+      'SetAVTransportURI',
+      { InstanceID: 0, CurrentURI: uri, CurrentURIMetaData: metadata },
+      options,
+    );
   }
 
   clearQueue() {
@@ -298,9 +316,61 @@ class SonosPlayer {
       await this.addToQueue(uri, metadata, { position: 0 });
       await this.setAVTransportURI(`x-rincon-queue:${this.uuid}#0`, '');
     } else {
-      await this.setAVTransportURI(uri, metadata);
+      await this._loadSource(uri, metadata);
     }
     await this.play();
+  }
+
+  /**
+   * Point the transport at a source that is not the queue — a stream, a
+   * station, a URL. This is the one command in a scene where the speaker has
+   * to go out to the internet before it can answer.
+   *
+   * For a cloud station the speaker asks the music service to resolve the
+   * stream first, and on a speaker that has been quiet all night that can take
+   * longer than the five seconds a set command is usually given. What happened
+   * then made it worse: the set was retried, with a second and a half, while
+   * the speaker was still working on the first — and the scene gave up on a
+   * source that was about to load, so Play was never sent. In one household's
+   * log the morning radio failed three mornings in four this way, and never
+   * once during the day, when the same station loaded in a quarter of a second.
+   *
+   * So: as much patience as adding to the queue gets, no blind retry, and a
+   * timeout is checked against the speaker before it is believed. A refusal
+   * is tried once more after a pause — a service that has just re-authenticated
+   * accepts the second request — and then reported as it stands.
+   *
+   * @private
+   */
+  async _loadSource(uri, metadata) {
+    const patient = { timeout: SLOW_ACTIONS.AddURIToQueue, retry: false };
+    try {
+      await this.setAVTransportURI(uri, metadata, patient);
+      return;
+    } catch (error) {
+      if (error?.aborted) throw error;
+      const refused = error?.upnpErrorCode !== undefined || error?.statusCode !== undefined;
+      if (!refused) {
+        // No answer. The speaker may well have done it anyway — ask it.
+        if (await this._isPointedAt(uri)) return;
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await this.setAVTransportURI(uri, metadata, patient);
+    }
+  }
+
+  /**
+   * @private Is the transport now on `uri`, or on what `uri` resolved to?
+   *
+   * The speaker rewrites a station's URI as it loads it — `x-sonosapi-stream:`
+   * becomes `x-sonosapi-hls:`, flags change, the encoding changes case — so
+   * the comparison is on the resource the URI names, not on the string.
+   */
+  async _isPointedAt(uri) {
+    const media = await this.getMediaInfo({ timeout: 2500, retry: false }).catch(() => null);
+    if (!media?.uri) return false;
+    return media.uri === uri || sourceKey(media.uri) === sourceKey(uri);
   }
 
   // ------------------------------------------------------------------ volume
@@ -562,4 +632,4 @@ class SonosPlayer {
   }
 }
 
-module.exports = { SonosPlayer, decodePlayMode, encodePlayMode, clampVolume, PLAY_MODES };
+module.exports = { SonosPlayer, decodePlayMode, encodePlayMode, clampVolume, sourceKey, PLAY_MODES };

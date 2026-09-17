@@ -743,12 +743,36 @@ class SonosSystem extends EventEmitter {
       const source =
         (this._topologySource && this.players.get(this._topologySource.uuid)) || this.list()[0];
       if (!source) return this._library;
-      const [favorites, playlists, radio] = await Promise.all([
-        source.getFavorites().catch(() => []),
-        source.getPlaylists().catch(() => []),
-        source.getRadioStations().catch(() => []),
+
+      // A Browse that fails hands back *nothing*, and nothing must not replace
+      // something. This used to be `.catch(() => [])`: one speaker answering
+      // one Browse with an error — mid-reboot, a music service re-authenticating
+      // — wrote an empty list over a good one and stamped it fresh. For the
+      // next five minutes every scene said the favourite "no longer exists",
+      // and the log showed a scene that had worked at 06:30:02 failing that way
+      // at 06:31:20. Each list that fails keeps what it had.
+      const previous = this._library;
+      const settled = await Promise.allSettled([
+        source.getFavorites(),
+        source.getPlaylists(),
+        source.getRadioStations(),
       ]);
-      this._library = { favorites, playlists, radio, fetchedAt: Date.now(), loaded: true };
+      const [favorites, playlists, radio] = settled.map((outcome, index) =>
+        outcome.status === 'fulfilled'
+          ? outcome.value
+          : [previous.favorites, previous.playlists, previous.radio][index],
+      );
+      const anyFailed = settled.some((outcome) => outcome.status === 'rejected');
+      if (anyFailed) {
+        this.log.debug?.(
+          `library: ${source.name} did not answer every Browse — keeping the previous list where it did not`,
+        );
+      }
+      // Nothing answered and nothing was known before: the library is still
+      // unloaded, so the next call asks again instead of serving an empty list
+      // as though it were the answer.
+      const loaded = previous.loaded || settled.some((outcome) => outcome.status === 'fulfilled');
+      this._library = { favorites, playlists, radio, fetchedAt: Date.now(), loaded };
       this.emit('library', this._library);
       return this._library;
     })().finally(() => {
@@ -762,19 +786,33 @@ class SonosSystem extends EventEmitter {
    * because emoji and punctuation in favourite names are easy to mistype.
    * @param {string} name
    */
-  async findFavorite(name) {
-    const library = await this.getLibrary();
-    return this._pick(library.favorites, name);
+  findFavorite(name) {
+    return this._lookup('favorites', name);
   }
 
-  async findPlaylist(name) {
-    const library = await this.getLibrary();
-    return this._pick(library.playlists, name);
+  findPlaylist(name) {
+    return this._lookup('playlists', name);
   }
 
-  async findRadio(name) {
-    const library = await this.getLibrary();
-    return this._pick(library.radio, name);
+  findRadio(name) {
+    return this._lookup('radio', name);
+  }
+
+  /**
+   * @private Look a name up in the cached list — and, before saying it is not
+   * there, in a fresh one.
+   *
+   * "That favourite no longer exists" is a strong claim to make from a list
+   * that may be five minutes old, or that a failed Browse has just emptied.
+   * A miss is rare, so the Browse it costs is paid almost never; a false
+   * "gone" is paid by a scene that does nothing at 06:30.
+   */
+  async _lookup(kind, name) {
+    const cached = await this.getLibrary();
+    const found = this._pick(cached[kind], name);
+    if (found) return found;
+    const fresh = await this._fetchLibrary().catch(() => cached);
+    return this._pick(fresh[kind], name);
   }
 
   /** @private */

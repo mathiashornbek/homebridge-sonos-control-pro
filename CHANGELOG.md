@@ -8,6 +8,40 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.6.1
+
+Nine days of one household's Homebridge log: the morning radio scene failed
+thirteen times out of twenty-five, three mornings in four — and never once
+during the day, when the same station loaded in a quarter of a second. Three
+causes, all on the leader's `SetAVTransportURI`, all fixed.
+
+- **A cloud station is given time to load.** Cold, a speaker has to ask the
+  music service to resolve the stream before it can answer, and after a night's
+  silence that took longer than the five seconds a set command was given. The
+  command was then sent *again*, with a second and a half, while the speaker
+  was still working on the first — and the scene gave up on a source that was
+  about to load. Play was never sent. Loading a stream now gets the same
+  fifteen seconds as adding to the queue, and is not blindly repeated.
+- **A set that timed out is checked before it is believed.** One local round
+  trip asks the speaker what it is pointed at; if it is on the station asked
+  for — allowing for the speaker rewriting the URI as it loads it — the scene
+  carries on to Play instead of reporting a failure that was not one.
+- **A refusal is tried once more, after a pause.** Three of the failures were
+  the speaker answering "Invalid arguments" in a quarter of a second — most
+  likely a music service whose session had lapsed. A second refusal is
+  reported as it stands.
+- **A Browse that fails no longer empties the library.** One speaker answering
+  one Browse with an error wrote an empty list over a good one and stamped it
+  fresh, and for the next five minutes every scene said the favourite "no
+  longer exists". Each list that fails keeps what it had. This was made worse
+  in 3.6.0, where the emptied list was also served while it was refreshed.
+- **"That favourite no longer exists" is said after a fresh look,** not from a
+  cached list. A miss is rare, so the Browse it costs is almost never paid.
+- The error for a slow load now names the time actually waited, rather than
+  the length of a retry that no longer happens.
+
+---
+
 ## 3.6.0
 
 The settings page opens at once, whatever the speakers are doing. Measured on

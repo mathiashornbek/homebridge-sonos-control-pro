@@ -2149,3 +2149,120 @@ test('an unusable default volume is caught before a single group is broken up', 
   assert.equal(sent, 0, 'not one level was sent before the bad one was noticed');
   assert.deepEqual(h.household.players.map((player) => player.volume), before);
 });
+
+// ────────────────────────────── loading a cloud source, as the log showed it
+
+// Nine days of one household's log: the morning radio scene failed thirteen
+// times out of twenty-five, three mornings in four, and never once during the
+// day when the same station loaded in a quarter of a second. Three causes, all
+// on the coordinator's SetAVTransportURI, all covered below.
+
+test('a cloud station that takes seven seconds to load still plays', async (t) => {
+  // Cold, a speaker has to ask the music service to resolve the stream, and
+  // that took longer than the five seconds a set command was given. It was
+  // then sent again with a second and a half, while the speaker was still
+  // working on the first — and the scene gave up on a source that was about
+  // to load. Play was never sent.
+  const h = await harness();
+  t.after(() => h.close());
+  // The real numbers are 5 s for a set, 15 s for a queue add, and a cold
+  // station at six to seven. Scaled by ten so the suite stays quick; the
+  // relationship is what matters — slower than the old budget, inside the new.
+  const { SLOW_ACTIONS } = require('../src/sonos/soap');
+  const real = { ...SLOW_ACTIONS };
+  SLOW_ACTIONS.SetAVTransportURI = 500;
+  SLOW_ACTIONS.AddURIToQueue = 1500;
+  t.after(() => Object.assign(SLOW_ACTIONS, real));
+  h.household.slowFor('Kitchen', 'SetAVTransportURI', 700);
+
+  const result = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
+  assert.equal(result.ok, true, result.steps?.[0]?.detail || result.error);
+
+  const kitchen = h.household.byName('Kitchen');
+  assert.equal(kitchen.currentUri, 'x-sonosapi-hls:city-radio');
+  assert.equal(kitchen.transportState, 'PLAYING');
+  const sets = kitchen.calls.filter((call) => call.action === 'SetAVTransportURI');
+  assert.equal(sets.length, 1, 'asked once — a second request while the first is in flight helps nobody');
+});
+
+test('a set the speaker did but never acknowledged is believed, and Play still follows', async (t) => {
+  // The command took; the answer did not come back in time. Asking the speaker
+  // what it is pointed at is one local round trip, and turns a false failure
+  // into the music that was asked for.
+  const h = await harness();
+  t.after(() => h.close());
+  const { SLOW_ACTIONS } = require('../src/sonos/soap');
+  const patient = SLOW_ACTIONS.AddURIToQueue;
+  SLOW_ACTIONS.AddURIToQueue = 300;
+  t.after(() => {
+    SLOW_ACTIONS.AddURIToQueue = patient;
+  });
+  h.household.answerLateFor('Kitchen', 'SetAVTransportURI', 3000);
+
+  const result = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
+  assert.equal(result.ok, true, result.steps?.[0]?.detail || result.error);
+
+  const kitchen = h.household.byName('Kitchen');
+  assert.equal(kitchen.transportState, 'PLAYING');
+  assert.equal(kitchen.calls.filter((call) => call.action === 'SetAVTransportURI').length, 1);
+  assert.ok(kitchen.calls.some((call) => call.action === 'GetMediaInfo'), 'the speaker was asked, not assumed');
+});
+
+test('a station the speaker refuses once is asked for again, after a pause', async (t) => {
+  // Three of the thirteen failures were the speaker answering "Invalid
+  // arguments" in a quarter of a second — a music service whose session had
+  // lapsed, most likely. A refusal is a real answer and was never retried. It
+  // is now, once, after a moment; a second refusal is reported as it stands.
+  const h = await harness();
+  t.after(() => h.close());
+  h.household.failOnce('Kitchen', 'SetAVTransportURI', 402);
+
+  const result = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
+  assert.equal(result.ok, true, result.steps?.[0]?.detail || result.error);
+  assert.equal(h.household.byName('Kitchen').transportState, 'PLAYING');
+});
+
+test('a station the speaker keeps refusing is reported, not retried for ever', async (t) => {
+  const h = await harness();
+  t.after(() => h.close());
+  h.household.failOn('Kitchen', 'SetAVTransportURI', 402);
+
+  const result = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
+  assert.equal(result.ok, false);
+  assert.match(result.steps[0].detail, /Invalid arguments|ugyldige argumenter/i);
+  const sets = h.household.byName('Kitchen').calls.filter((call) => call.action === 'SetAVTransportURI');
+  assert.equal(sets.length, 2, 'once, and once more — not a loop');
+});
+
+test('a Browse that fails does not empty the library', async (t) => {
+  // One speaker answering one Browse with an error wrote an empty list over a
+  // good one and stamped it fresh; for the next five minutes every scene said
+  // the favourite no longer existed. The log had a scene that worked at
+  // 06:30:02 failing that way at 06:31:20.
+  const h = await harness();
+  t.after(() => h.close());
+
+  const before = await h.system.getLibrary({ force: true });
+  assert.ok(before.favorites.length > 0, 'the fixture has favourites');
+
+  // Whoever the library is fetched from fails every Browse, once each.
+  const source = h.system._topologySource || h.system.list()[0];
+  h.household.failOnce(source.name, 'Browse', 501, 3);
+  const after = await h.system.getLibrary({ force: true });
+
+  assert.equal(after.favorites.length, before.favorites.length, 'the favourites are still there');
+  assert.equal(after.playlists.length, before.playlists.length);
+  assert.equal(after.loaded, true);
+});
+
+test('a favourite missing from the cached list is looked for afresh before it is declared gone', async (t) => {
+  const h = await harness();
+  t.after(() => h.close());
+
+  // The cache says there is nothing, and says it with a fresh timestamp.
+  h.system._library = { favorites: [], playlists: [], radio: [], fetchedAt: Date.now(), loaded: true };
+
+  const result = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
+  assert.equal(result.ok, true, result.steps?.[0]?.detail || result.error);
+  assert.equal(h.household.byName('Kitchen').currentUri, 'x-sonosapi-hls:city-radio');
+});

@@ -311,7 +311,7 @@ The settings page shows two fields on purpose. These are still read from `config
 Issues and pull requests are very welcome. The test suite is the contract:
 
 ```bash
-npm test        # 215 unit and integration tests against a full mock Sonos household
+npm test        # 221 unit and integration tests against a full mock Sonos household
 npm run test:ui # 114 checks driving the real settings UI in Chromium
 ```
 
