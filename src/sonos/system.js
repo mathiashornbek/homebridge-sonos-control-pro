@@ -109,8 +109,10 @@ class SonosSystem extends EventEmitter {
     /** @type {Array<{coordinatorUuid: string, id: string, memberUuids: string[]}>} */
     this.groups = [];
 
-    this._library = { favorites: [], playlists: [], radio: [], fetchedAt: 0, loaded: false };
+    this._library = { favorites: [], playlists: [], radio: [], fetchedAt: 0, loaded: false, source: null, error: null };
     this._libraryPromise = null;
+    /** The room that served the library last; asked first next time. */
+    this._librarySource = null;
     this._topologyPromise = null;
     this._topologySource = null;
     /**
@@ -735,52 +737,122 @@ class SonosSystem extends EventEmitter {
     return this._fetchLibrary();
   }
 
+  /**
+   * @private The speakers that can hand over the library, best first.
+   *
+   * Rooms only. A bonded speaker — the second half of a stereo pair, a Sub —
+   * answers the topology like anyone else and cannot serve a single Browse:
+   * every one of the six in the household this was written for answered
+   * HTTP 500 in a few milliseconds. 3.6.0 began asking "whoever answered the
+   * topology last", which is a satellite about a third of the time after a
+   * restart, and from then until the next fan-out every scene with a favourite
+   * failed with "no longer exists". It existed; nobody who had it was asked.
+   *
+   * The room that served the library last is asked first, then the room that
+   * answered the topology last, then everyone else.
+   */
+  _librarySources() {
+    const rooms = this.list();
+    const preferred = [this._librarySource, this._topologySource]
+      .map((player) => player && this.players.get(player.uuid))
+      .filter((player) => player && !player.invisible);
+    return [...new Set([...preferred, ...rooms])];
+  }
+
+  /**
+   * @private The three lists from one speaker. Throws when it answered none
+   * of them; a list it did not answer is filled from what was known.
+   */
+  async _browseLibrary(source, previous) {
+    const settled = await Promise.allSettled([
+      source.getFavorites(),
+      source.getPlaylists(),
+      source.getRadioStations(),
+    ]);
+    if (settled.every((outcome) => outcome.status === 'rejected')) {
+      throw settled[0].reason;
+    }
+    // A Browse that fails hands back *nothing*, and nothing must not replace
+    // something. This used to be `.catch(() => [])`: one failed Browse wrote
+    // an empty list over a good one and stamped it fresh, and for the next
+    // five minutes every scene said the favourite "no longer exists".
+    const [favorites, playlists, radio] = settled.map((outcome, index) =>
+      outcome.status === 'fulfilled'
+        ? outcome.value
+        : [previous.favorites, previous.playlists, previous.radio][index],
+    );
+    return { favorites, playlists, radio, source: source.name };
+  }
+
   /** @private Browse the household once, sharing one request between callers. */
   _fetchLibrary() {
     if (this._libraryPromise) return this._libraryPromise;
     this._libraryPromise = (async () => {
-      // Ask whoever answered the topology last. The first speaker by name was
-      // asked before, and when that one is asleep every library fetch waited
-      // out its timeout — while thirteen others would have answered at once.
-      const source =
-        (this._topologySource && this.players.get(this._topologySource.uuid)) || this.list()[0];
-      if (!source) return this._library;
-
-      // A Browse that fails hands back *nothing*, and nothing must not replace
-      // something. This used to be `.catch(() => [])`: one speaker answering
-      // one Browse with an error — mid-reboot, a music service re-authenticating
-      // — wrote an empty list over a good one and stamped it fresh. For the
-      // next five minutes every scene said the favourite "no longer exists",
-      // and the log showed a scene that had worked at 06:30:02 failing that way
-      // at 06:31:20. Each list that fails keeps what it had.
+      const [first, ...others] = this._librarySources();
+      if (!first) return this._library;
       const previous = this._library;
-      const settled = await Promise.allSettled([
-        source.getFavorites(),
-        source.getPlaylists(),
-        source.getRadioStations(),
-      ]);
-      const [favorites, playlists, radio] = settled.map((outcome, index) =>
-        outcome.status === 'fulfilled'
-          ? outcome.value
-          : [previous.favorites, previous.playlists, previous.radio][index],
-      );
-      const anyFailed = settled.some((outcome) => outcome.status === 'rejected');
-      if (anyFailed) {
-        this.log.debug?.(
-          `library: ${source.name} did not answer every Browse — keeping the previous list where it did not`,
-        );
+
+      let result = null;
+      let firstError = null;
+      try {
+        result = await this._browseLibrary(first, previous);
+      } catch (error) {
+        firstError = error;
+        // Ask every other room at once and take the first that answers — the
+        // same shape the topology refresh uses. One room that is asleep or
+        // mid-reboot must not cost every scene its favourites.
+        if (others.length) {
+          try {
+            result = await Promise.any(others.map((player) => this._browseLibrary(player, previous)));
+          } catch {
+            /* nobody could */
+          }
+        }
       }
-      // Nothing answered and nothing was known before: the library is still
-      // unloaded, so the next call asks again instead of serving an empty list
-      // as though it were the answer.
-      const loaded = previous.loaded || settled.some((outcome) => outcome.status === 'fulfilled');
-      this._library = { favorites, playlists, radio, fetchedAt: Date.now(), loaded };
+
+      if (!result) {
+        this.log.warn(
+          t('log.libraryUnavailable', {
+            count: this._librarySources().length,
+            message: firstError?.message || '?',
+          }),
+        );
+        // Nothing answered: what was known stays, and if nothing was known the
+        // library stays unloaded so the next call asks again rather than
+        // serving an empty list as though it were the answer.
+        this._library = { ...previous, fetchedAt: Date.now(), error: firstError?.message || 'unavailable' };
+        return this._library;
+      }
+
+      this._librarySource = this.players.get(
+        [...this.players.values()].find((player) => player.name === result.source)?.uuid,
+      ) || this._librarySource;
+      if (result.source !== previous.source) {
+        this.log.debug?.(`library: served by ${result.source}`);
+      }
+      this._library = { ...result, fetchedAt: Date.now(), loaded: true, error: null };
       this.emit('library', this._library);
       return this._library;
     })().finally(() => {
       this._libraryPromise = null;
     });
     return this._libraryPromise;
+  }
+
+  /**
+   * Where the library came from, and whether it could be fetched at all — so
+   * an error message can say "the list could not be fetched" rather than
+   * "the favourite no longer exists" when the second is not known to be true.
+   */
+  libraryStatus() {
+    const library = this._library;
+    return {
+      loaded: library.loaded === true,
+      source: library.source || null,
+      favorites: library.favorites.length,
+      error: library.error || null,
+      fetchedAt: library.fetchedAt,
+    };
   }
 
   /**

@@ -69,6 +69,20 @@ class SonosControlPlatform {
       getScenes: () => this.store.scenes,
     });
 
+    // A scene that has just resolved its favourite writes the URI back into
+    // its own step, so that next time the list is not needed. That step is
+    // the store's object; the store is what has to be written. A run may
+    // resolve several sources in a row, so the write is coalesced.
+    this._saveTimer = null;
+    this.system.on('sourceRemembered', () => {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = setTimeout(() => {
+        this._saveTimer = null;
+        this.store.save().catch(() => {});
+      }, 1500);
+      this._saveTimer.unref?.();
+    });
+
     this.api.on('didFinishLaunching', () => {
       this.start().catch((error) => {
         this.log.error(t('log.startFailed', { message: error.stack || error.message }));
@@ -183,11 +197,15 @@ class SonosControlPlatform {
         this.system
           .getLibrary()
           .then((library) =>
-            this.log.debug?.(
-              t('log.libraryLoaded', {
+            // At info, once, at startup: which room served the list and how
+            // long it is. When a favourite is reported missing an hour later,
+            // this line is what says whether the list was ever there.
+            this.log.info(
+              t(library.loaded ? 'log.libraryLoaded' : 'log.libraryNotLoaded', {
                 favorites: library.favorites.length,
                 playlists: library.playlists.length,
                 radio: library.radio.length,
+                source: library.source || '?',
               }),
             ),
           )

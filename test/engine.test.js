@@ -2305,3 +2305,174 @@ test('a station the transport already sits on is played, not loaded again', asyn
   assert.equal(kitchen.calls.filter((call) => call.action === 'Play').length, 1);
   assert.match(second.steps[0].detail, /fortsatte|continued/, 'and the summary says so');
 });
+
+// ────────────────────────────────────── the library, and who is asked for it
+
+/**
+ * The household as it really is: rooms, and bonded speakers that answer the
+ * topology like anyone else and cannot serve a Browse. One scene that plays a
+ * favourite on the kitchen.
+ */
+async function bondedHarness() {
+  const household = new MockHousehold(['Kitchen', 'Kitchen', 'Sub', 'Study', 'Bedroom']);
+  // Copies, not the fixture itself: one test below renames a favourite the
+  // way a user would in the Sonos app, and the next test must not inherit it.
+  household.favorites = fixture.FAVORITES.map((item) => ({ ...item }));
+  household.playlists = fixture.PLAYLISTS.map((item) => ({ ...item }));
+  await household.listen();
+  household.bond('Kitchen', 'Kitchen');
+  household.bond('Kitchen', 'Sub');
+  const system = new SonosSystem({
+    log: quietLog,
+    seedHosts: household.players.map((player) => `${player.host}:${player.port}`),
+    discoveryTimeout: 200,
+    discoverFn: async () => [],
+  });
+  await system.discover({ force: true });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sonos-control-'));
+  const store = new SceneStore({ storagePath: dir, log: quietLog });
+  store.load();
+  store.replaceAll([
+    {
+      name: 'Radio i køkkenet',
+      steps: [{ action: 'playFavorite', target: { type: 'players', names: ['Kitchen'] }, params: { favorite: 'City Radio' } }],
+    },
+  ]);
+  const runner = new SceneRunner({ system, log: quietLog, getScenes: () => store.scenes });
+  const scene = [...store.scenes.values()][0];
+  const satellite = [...system.players.values()].find((player) => player.invisible);
+  const rooms = system.list();
+  return {
+    household, system, store, runner, scene, satellite, rooms, dir,
+    async close() { runner.cancelAll(); system.stop(); await household.close(); fs.rmSync(dir, { recursive: true, force: true }); },
+  };
+}
+
+test('the library is never asked of a bonded speaker, whoever answered the topology', async (t) => {
+  // 3.6.0 asked "whoever answered the topology last" — a satellite about a
+  // third of the time after a restart — and every scene with a favourite then
+  // failed with "no longer exists" until the next fan-out. Nine days of one
+  // household's log had two of those; the day 3.6.2 shipped had two more
+  // within fifteen minutes of the restart.
+  const h = await bondedHarness();
+  t.after(() => h.close());
+  assert.ok(h.satellite, 'the household has a bonded speaker');
+
+  h.system._topologySource = h.satellite;
+  const library = await h.system.getLibrary({ force: true });
+
+  assert.equal(library.loaded, true);
+  assert.ok(library.favorites.some((item) => item.title === 'City Radio'), 'the favourites are there');
+  assert.notEqual(library.source, h.satellite.name === 'Kitchen' ? undefined : h.satellite.name);
+  assert.ok(h.rooms.some((room) => room.name === library.source), `served by a room, not ${h.satellite.name}`);
+  assert.equal(h.satellite.calls?.length ?? 0, 0, 'and the satellite was not even asked');
+});
+
+test('when the room asked first cannot serve the library, another room is asked at once', async (t) => {
+  const h = await bondedHarness();
+  t.after(() => h.close());
+
+  const first = h.system._librarySources()[0];
+  h.household.failOn(first.name, 'Browse', 501);
+  const library = await h.system.getLibrary({ force: true });
+
+  assert.equal(library.loaded, true);
+  assert.ok(library.favorites.length > 0);
+  assert.notEqual(library.source, first.name, 'somebody else served it');
+});
+
+test('a scene that has played its favourite once plays it again with no library at all', async (t) => {
+  // What was resolved is written back into the step. A URI does not change
+  // because a speaker is asleep or a list comes back empty.
+  const h = await bondedHarness();
+  t.after(() => h.close());
+
+  const first = await h.runner.run(h.scene.id, { trigger: 'test' });
+  assert.equal(first.ok, true, first.steps?.[0]?.detail);
+  const remembered = h.scene.steps[0].params.source?.remembered;
+  assert.ok(remembered?.uri, 'the step remembers the URI it played');
+  assert.equal(remembered.for, 'City Radio');
+
+  // Now nobody in the house will serve a Browse, and the cache is gone.
+  for (const room of h.rooms) h.household.failOn(room.name, 'Browse', 501);
+  h.system._library = { favorites: [], playlists: [], radio: [], fetchedAt: 0, loaded: false, source: null, error: null };
+  h.household.byName('Kitchen').transportState = 'STOPPED';
+
+  const second = await h.runner.run(h.scene.id, { trigger: 'test' });
+  assert.equal(second.ok, true, second.steps?.[0]?.detail);
+  assert.equal(h.household.byName('Kitchen').transportState, 'PLAYING');
+});
+
+test('a favourite renamed in Sonos still plays from what the scene remembers', async (t) => {
+  const h = await bondedHarness();
+  t.after(() => h.close());
+
+  assert.equal((await h.runner.run(h.scene.id, { trigger: 'test' })).ok, true);
+  // The user renames it in the Sonos app — and the plugin has seen the new
+  // list, so the old name is genuinely not in it any more.
+  const favourite = h.household.favorites.find((item) => item.title === 'City Radio');
+  favourite.title = 'Byens Radio';
+  const fresh = await h.system.getLibrary({ force: true });
+  assert.ok(!fresh.favorites.some((item) => item.title === 'City Radio'), 'the list no longer has it');
+  h.household.byName('Kitchen').transportState = 'STOPPED';
+
+  const result = await h.runner.run(h.scene.id, { trigger: 'test' });
+  assert.equal(result.ok, true, result.steps?.[0]?.detail);
+  assert.equal(h.household.byName('Kitchen').transportState, 'PLAYING');
+});
+
+test('a music scene edited to name a different favourite never plays the old one from memory', async (t) => {
+  // The music scene keeps its source as an object the editor changes in
+  // place, so what was remembered for the old title is still sitting there
+  // when the new title is looked up. The tag on the memory is what stops it.
+  const h = await bondedHarness();
+  t.after(() => h.close());
+  h.store.replaceAll([
+    {
+      name: 'Musik',
+      steps: [
+        {
+          action: 'groupAndPlay',
+          params: { coordinator: 'Kitchen', source: { type: 'favorite', value: 'City Radio' }, membersMode: 'list', members: [] },
+        },
+      ],
+    },
+  ]);
+  const scene = [...h.store.scenes.values()][0];
+
+  const first = await h.runner.run(scene.id, { trigger: 'test' });
+  assert.equal(first.ok, true, first.steps?.[0]?.detail);
+  assert.ok(scene.steps[0].params.source.remembered?.uri, 'remembered');
+
+  // Edited in place, as the editor does; the memory is still attached.
+  scene.steps[0].params.source.value = 'Findes Ikke';
+  for (const room of h.rooms) h.household.failOn(room.name, 'Browse', 501);
+  h.system._library = { favorites: [], playlists: [], radio: [], fetchedAt: 0, loaded: false, source: null, error: null };
+  h.household.byName('Kitchen').transportState = 'STOPPED';
+
+  const result = await h.runner.run(scene.id, { trigger: 'test' });
+  assert.equal(result.ok, false, 'the memory is for "City Radio", not for this');
+  assert.match(result.steps[0].detail, /Findes Ikke/);
+  assert.equal(h.household.byName('Kitchen').transportState, 'STOPPED', 'and nothing was played');
+});
+
+test('when the list cannot be fetched, the error says so instead of "no longer exists"', async (t) => {
+  const h = await bondedHarness();
+  t.after(() => h.close());
+  for (const room of h.rooms) h.household.failOn(room.name, 'Browse', 501);
+
+  const result = await h.runner.run(h.scene.id, { trigger: 'test' });
+  assert.equal(result.ok, false);
+  assert.match(result.steps[0].detail, /kunne ikke hentes fra noget rum|could not be fetched/);
+});
+
+test('remembering a source asks the platform to save the scene, once', async (t) => {
+  const h = await bondedHarness();
+  t.after(() => h.close());
+  let asked = 0;
+  h.system.on('sourceRemembered', () => { asked += 1; });
+
+  await h.runner.run(h.scene.id, { trigger: 'test' });
+  await h.runner.run(h.scene.id, { trigger: 'test' });
+  assert.equal(asked, 1, 'the second run resolved the same thing and had nothing new to save');
+});

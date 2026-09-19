@@ -82,7 +82,14 @@ module.exports = {
   'log.watchUnavailable': 'File watching is not available: {message}',
   'log.scenesChanged': 'scenes.json changed on disk — reloading',
   'log.apiListening': 'The control API is listening on 127.0.0.1:{port}',
-  'log.libraryLoaded': 'Sonos library: {favorites} favourites, {playlists} playlists, {radio} radio stations',
+  'log.libraryLoaded':
+    'Sonos library from {source}: {favorites} favourites, {playlists} playlists, {radio} radio stations',
+  'log.libraryNotLoaded':
+    'The Sonos library could not be fetched from any room yet — scenes will use what they remember, and ask again',
+  'log.libraryUnavailable':
+    'No room could serve the Sonos library ({count} asked; first said: {message}). Keeping what was known.',
+  'error.libraryUnavailable': '(the list could not be fetched from any room: {message})',
+  'error.libraryFrom': '(the list from {source} has {count} favourites)',
   'log.conditionResult': '   condition for "{name}": {result}',
   'log.stepSkipped': '   ⏭ {description} — {detail}',
   'log.stepOk': '   ✓ {detail} ({ms} ms)',

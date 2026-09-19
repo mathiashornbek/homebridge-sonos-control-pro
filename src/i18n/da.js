@@ -83,7 +83,13 @@ module.exports = {
   'log.scenesChanged': 'scenes.json blev ændret på disken — genindlæser',
   'log.apiListening': 'Kontrol-API\'et lytter på 127.0.0.1:{port}',
   'log.libraryLoaded':
-    'Sonos-bibliotek: {favorites} favoritter, {playlists} playlister, {radio} radiostationer',
+    'Sonos-bibliotek fra {source}: {favorites} favoritter, {playlists} playlister, {radio} radiostationer',
+  'log.libraryNotLoaded':
+    'Sonos-biblioteket kunne endnu ikke hentes fra noget rum — scener bruger hvad de husker, og spørger igen',
+  'log.libraryUnavailable':
+    'Intet rum kunne levere Sonos-biblioteket ({count} spurgt; det første sagde: {message}). Beholder det kendte.',
+  'error.libraryUnavailable': '(listen kunne ikke hentes fra noget rum: {message})',
+  'error.libraryFrom': '(listen fra {source} har {count} favoritter)',
   'log.conditionResult': '   betingelse for "{name}": {result}',
   'log.stepSkipped': '   ⏭ {description} — {detail}',
   'log.stepOk': '   ✓ {detail} ({ms} ms)',

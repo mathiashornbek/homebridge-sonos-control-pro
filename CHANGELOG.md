@@ -8,6 +8,40 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.7.0
+
+A scene said its favourite "no longer exists". It existed. This release is
+about making sure that sentence is never said again about a favourite that is
+there — and about a scene not needing the list at all once it has played.
+
+- **The library is never asked of a bonded speaker.** A stereo pair's second
+  speaker and a Sub answer the topology like any room and cannot serve a
+  single Browse — all six in the household this was written for answer HTTP
+  500 in a few milliseconds. 3.6.0 began fetching the library from "whoever
+  answered the topology last", which is one of those about a third of the time
+  after a restart; from then until the next fan-out, every scene with a
+  favourite failed with "no longer exists". Rooms only, now: the room that
+  served the list last is asked first, and if it cannot, every other room is
+  asked at once and the first to answer wins.
+- **A scene remembers the source it played.** What the list resolved to — the
+  URI and its metadata — is written back into the step and saved with the
+  scene, tagged with the title it was resolved for. The list is still consulted
+  first, so a favourite recreated under the same name is found; but when the
+  list cannot be fetched, or the favourite has been renamed in the Sonos app,
+  the scene plays what it played last time. A scene edited to name a different
+  favourite never plays the old one: the tag does not match.
+- **The error tells the truth.** When a favourite really cannot be found, the
+  message now says whether the list could be fetched at all, and from which
+  room, and how long it was — instead of asserting that the favourite is gone.
+- **The startup log names the room that served the library,** at info level,
+  once. An hour later, when something is reported missing, that line says
+  whether the list was ever there.
+- The mock household's bonded speakers now refuse a Browse the way real ones
+  do, so this cannot come back quietly. Seven new tests, each confirmed to fail
+  against 3.6.2.
+
+---
+
 ## 3.6.2
 
 - **A station the transport already sits on is played, not loaded again.**

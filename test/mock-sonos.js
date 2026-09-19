@@ -305,6 +305,19 @@ class MockHousehold {
         return send(500, fault(failure.code));
       }
 
+      // A bonded speaker has no library to give. Every one of the six in a
+      // real household — stereo partners and Subs — answers a Browse with an
+      // HTTP 500 carrying a fault that names no error code, in a few
+      // milliseconds. It answers everything else normally, including the
+      // topology, which is how one came to be asked for the library at all.
+      if (action === 'Browse' && this.satelliteOf.has(player.uuid)) {
+        return send(
+          500,
+          `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault>` +
+            `<faultcode>s:Client</faultcode><faultstring>UPnPError</faultstring></s:Fault></s:Body></s:Envelope>`,
+        );
+      }
+
       const result = this.execute(player, action, args);
       if (result && typeof result === 'object' && result.fault) {
         return send(500, fault(result.fault));

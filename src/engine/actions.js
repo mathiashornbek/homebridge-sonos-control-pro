@@ -189,30 +189,109 @@ function requireNumber(value, labelKey, min, max) {
  * @param {import('../sonos/system').SonosSystem} system
  * @param {{type: string, value: string, title?: string}} source
  */
+/**
+ * The single-purpose actions keep their title in `params.favorite`,
+ * `params.playlist` or `params.radio`. This gives them the same source object
+ * the music scene has, with the same `remembered` slot — kept on the step's
+ * params under `source`, so it is saved with the scene and survives a restart.
+ */
+function sourceOf(step, kind) {
+  const params = step.params || (step.params = {});
+  const value = params[kind] || '';
+  if (!params.source || params.source.type !== kind || params.source.value !== value) {
+    params.source = { type: kind, value };
+  }
+  return params.source;
+}
+
+/**
+ * Turn a scene's source — "the favourite called X" — into something a speaker
+ * can be handed: a URI and its metadata.
+ *
+ * The household's list is the truth and is consulted first. But a scene that
+ * has played its favourite once has seen the URI, and a URI does not change
+ * when a speaker is asleep, or answers a Browse with an error, or a list comes
+ * back empty. So what was resolved last time is written back into the source
+ * — `remembered`, tagged with the title it was resolved for — and used when the
+ * list cannot be. A renamed favourite still plays; a favourite removed and
+ * recreated under the same name is found in the list first and refreshes what
+ * is remembered. The tag means a scene edited to name a different favourite
+ * never plays the old one.
+ *
+ * Only when neither the list nor memory has an answer is the favourite
+ * reported missing — and then the message says whether the list could be
+ * fetched at all, because "no longer exists" was being said about favourites
+ * that existed all along.
+ *
+ * @param {import('../sonos/system').SonosSystem} system
+ * @param {object} source The step's `params.source`, mutated to remember.
+ */
 async function resolveSource(system, source) {
   const value = source.value || '';
-  switch (source.type) {
-    case 'favorite': {
-      const favorite = await system.findFavorite(value);
-      if (!favorite) throw new Error(t('error.favoriteGone', { name: value }));
-      return favorite;
-    }
-    case 'playlist': {
-      const playlist = await system.findPlaylist(value);
-      if (!playlist) throw new Error(t('error.playlistGone', { name: value }));
-      return { ...playlist, isContainer: true };
-    }
-    case 'radio': {
-      const station = await system.findRadio(value);
-      if (!station) throw new Error(t('error.radioGone', { name: value }));
-      return { ...station, isContainer: false };
-    }
-    case 'uri':
-      if (!value) throw new Error(t('error.noUri'));
-      return { uri: value, title: source.title || 'Stream', isContainer: false, metadata: '' };
-    default:
-      throw new Error(t('error.unknownSource', { type: source.type }));
+  const kind = source.type;
+
+  if (kind === 'uri') {
+    if (!value) throw new Error(t('error.noUri'));
+    return { uri: value, title: source.title || 'Stream', isContainer: false, metadata: '' };
   }
+
+  const find = { favorite: 'findFavorite', playlist: 'findPlaylist', radio: 'findRadio' }[kind];
+  if (!find) throw new Error(t('error.unknownSource', { type: kind }));
+
+  const shape = (item) =>
+    kind === 'playlist'
+      ? { ...item, isContainer: true }
+      : kind === 'radio'
+        ? { ...item, isContainer: false }
+        : item;
+
+  let live = null;
+  try {
+    live = await system[find](value);
+  } catch {
+    live = null;
+  }
+  if (live) {
+    const item = shape(live);
+    const next = {
+      for: value,
+      uri: item.uri,
+      title: item.title,
+      metadata: item.metadata || '',
+      upnpClass: item.upnpClass || '',
+      isContainer: Boolean(item.isContainer),
+    };
+    if (JSON.stringify(next) !== JSON.stringify(source.remembered || null)) {
+      source.remembered = next;
+      // The step lives in the store; whoever owns the store saves it.
+      system.emit?.('sourceRemembered', { title: item.title });
+    }
+    return item;
+  }
+
+  const remembered = source.remembered;
+  if (remembered && remembered.for === value && remembered.uri) {
+    return {
+      uri: remembered.uri,
+      title: remembered.title || value,
+      metadata: remembered.metadata || '',
+      upnpClass: remembered.upnpClass || '',
+      isContainer: Boolean(remembered.isContainer),
+      fromMemory: true,
+    };
+  }
+
+  const status = system.libraryStatus?.();
+  const gone = t({ favorite: 'error.favoriteGone', playlist: 'error.playlistGone', radio: 'error.radioGone' }[kind], {
+    name: value,
+  });
+  if (status && !status.loaded) {
+    throw new Error(`${gone} ${t('error.libraryUnavailable', { message: status.error || '?' })}`);
+  }
+  if (status) {
+    throw new Error(`${gone} ${t('error.libraryFrom', { source: status.source || '?', count: status.favorites })}`);
+  }
+  throw new Error(gone);
 }
 
 /**
@@ -552,8 +631,7 @@ const ACTIONS = {
     async run(ctx, step, players) {
       const player = playbackTarget(ctx.system, players[0]);
       if (!player) throw new Error(t('error.noSpeakerChosen'));
-      const favorite = await ctx.system.findFavorite(step.params.favorite);
-      if (!favorite) throw new Error(t('error.favoriteGone', { name: step.params.favorite }));
+      const favorite = await resolveSource(ctx.system, sourceOf(step, 'favorite'));
       const how = await ctx.system.playOn(player, favorite);
       return t(how === 'reused' ? 'result.continuing' : 'result.playing', {
         title: favorite.title,
@@ -569,9 +647,8 @@ const ACTIONS = {
     async run(ctx, step, players) {
       const player = playbackTarget(ctx.system, players[0]);
       if (!player) throw new Error(t('error.noSpeakerChosen'));
-      const playlist = await ctx.system.findPlaylist(step.params.playlist);
-      if (!playlist) throw new Error(t('error.playlistGone', { name: step.params.playlist }));
-      const how = await ctx.system.playOn(player, { ...playlist, isContainer: true });
+      const playlist = await resolveSource(ctx.system, sourceOf(step, 'playlist'));
+      const how = await ctx.system.playOn(player, playlist);
       return t(how === 'reused' ? 'result.continuingPlaylist' : 'result.playingPlaylist', {
         title: playlist.title,
         player: player.name,
@@ -586,9 +663,8 @@ const ACTIONS = {
     async run(ctx, step, players) {
       const player = playbackTarget(ctx.system, players[0]);
       if (!player) throw new Error(t('error.noSpeakerChosen'));
-      const station = await ctx.system.findRadio(step.params.radio);
-      if (!station) throw new Error(t('error.radioGone', { name: step.params.radio }));
-      await ctx.system.playOn(player, { ...station, isContainer: false });
+      const station = await resolveSource(ctx.system, sourceOf(step, 'radio'));
+      await ctx.system.playOn(player, station);
       return t('result.playingRadio', { title: station.title, player: player.name });
     },
   },
