@@ -311,7 +311,7 @@ Indstillingssiden viser to felter med vilje. Disse læses stadig fra `config.jso
 Issues og pull requests er meget velkomne. Testsuiten er kontrakten:
 
 ```bash
-npm test        # 221 tests mod en komplet efterligning af en Sonos-husstand
+npm test        # 222 tests mod en komplet efterligning af en Sonos-husstand
 npm run test:ui # 114 kontroller der styrer den rigtige brugerflade i Chromium
 ```
 

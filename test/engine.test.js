@@ -881,14 +881,23 @@ test('switching the source away and back reloads the playlist', async (t) => {
   assert.equal(kitchen.currentUri, `x-rincon-queue:${kitchen.uuid}#0`);
 });
 
-test('a radio scene never claims to reuse a queue', async (t) => {
+test('a radio scene never touches the queue, first time or second', async (t) => {
   const h = await harness();
   t.after(() => h.close());
 
-  await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
+  const first = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
+  assert.match(first.steps[0].detail, /spiller "City Radio"/i, 'loaded the first time');
+  // The second press finds the transport already on the station and only
+  // tells it to play — "continued", the same word the queue path uses, but
+  // with no queue anywhere near it.
   const second = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
-  assert.match(second.steps[0].detail, /spiller "City Radio"/i);
+  assert.match(second.steps[0].detail, /fortsatte "City Radio"/i, 'continued the second time');
   assert.equal(h.household.byName('Kitchen').queue.length, 0);
+  assert.equal(
+    h.household.byName('Kitchen').calls.filter((call) => /Queue/.test(call.action)).length,
+    0,
+    'no queue call was ever made for a stream',
+  );
 });
 
 test('volume is applied alongside loading the source, not after it', async (t) => {
@@ -2265,4 +2274,34 @@ test('a favourite missing from the cached list is looked for afresh before it is
   const result = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
   assert.equal(result.ok, true, result.steps?.[0]?.detail || result.error);
   assert.equal(h.household.byName('Kitchen').currentUri, 'x-sonosapi-hls:city-radio');
+});
+
+test('a station the transport already sits on is played, not loaded again', async (t) => {
+  // Loading a cloud station cold took longer than any budget; Play on a
+  // station the transport already has answers in ten milliseconds and the
+  // speaker buffers behind it. Measured on a speaker that had sat stopped on
+  // the station for over a day. So the morning after an evening of the same
+  // station — most mornings — the slow command is not sent at all.
+  const h = await harness();
+  t.after(() => h.close());
+  const kitchen = h.household.byName('Kitchen');
+
+  // Yesterday evening: the station was loaded and later stopped.
+  const first = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
+  assert.equal(first.ok, true);
+  assert.equal(kitchen.currentUri, 'x-sonosapi-hls:city-radio');
+  kitchen.transportState = 'STOPPED';
+  kitchen.calls.length = 0;
+
+  // This morning. If the load were sent, it would hang past the scene's patience.
+  h.household.slowFor('Kitchen', 'SetAVTransportURI', 60000);
+
+  const started = Date.now();
+  const second = await h.runner.run(h.sceneByName('Play City Radio').id, { trigger: 'test' });
+  assert.equal(second.ok, true, second.steps?.[0]?.detail || second.error);
+  assert.ok(Date.now() - started < 2000, 'and it was quick');
+  assert.equal(kitchen.transportState, 'PLAYING');
+  assert.equal(kitchen.calls.filter((call) => call.action === 'SetAVTransportURI').length, 0, 'the station was not loaded again');
+  assert.equal(kitchen.calls.filter((call) => call.action === 'Play').length, 1);
+  assert.match(second.steps[0].detail, /fortsatte|continued/, 'and the summary says so');
 });

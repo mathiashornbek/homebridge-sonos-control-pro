@@ -277,6 +277,8 @@ class SonosPlayer {
    * Sonos app itself does.
    *
    * @param {{uri: string, metadata?: string, isContainer?: boolean, title?: string}} playable
+   * @returns {Promise<'loaded'|'reused'>} Whether the source had to be loaded,
+   *   or was already on the transport and merely told to play.
    */
   async playItem(playable) {
     const { uri } = playable;
@@ -315,10 +317,30 @@ class SonosPlayer {
       await this.clearQueue();
       await this.addToQueue(uri, metadata, { position: 0 });
       await this.setAVTransportURI(`x-rincon-queue:${this.uuid}#0`, '');
-    } else {
-      await this._loadSource(uri, metadata);
+      await this.play();
+      return 'loaded';
     }
+
+    // A station the transport is already on is not loaded again.
+    //
+    // Loading a cloud station is the one slow thing in a scene: the speaker
+    // has to ask the music service to resolve the stream, and cold — the
+    // morning after — that took longer than any budget. Play does not: it
+    // answers in ten milliseconds and the speaker buffers behind it, and it
+    // does so on a station the transport has sat on, stopped, for a day.
+    // Measured on the speaker this was written for. The morning scene that
+    // failed three days in four therefore plays at once on every morning that
+    // follows an evening of the same station — which is most of them.
+    //
+    // A follower's transport reads `x-rincon:` and never matches, so a speaker
+    // inside someone else's group still takes the full path.
+    if (await this._isPointedAt(uri)) {
+      await this.play();
+      return 'reused';
+    }
+    await this._loadSource(uri, metadata);
     await this.play();
+    return 'loaded';
   }
 
   /**

@@ -654,7 +654,7 @@ class SonosSystem extends EventEmitter {
       }
     }
 
-    await player.playItem(item);
+    const how = await player.playItem(item);
 
     if (item.isContainer) {
       const queue = await player.getQueueInfo().catch(() => null);
@@ -663,7 +663,9 @@ class SonosSystem extends EventEmitter {
     } else {
       this._queueMemo.delete(player.uuid);
     }
-    return 'loaded';
+    // A stream the transport was already on is 'reused' — the same word the
+    // queue path uses, and the same note in the scene's summary.
+    return how;
   }
 
   /**

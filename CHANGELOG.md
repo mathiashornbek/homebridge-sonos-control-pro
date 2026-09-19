@@ -8,6 +8,23 @@ All notable changes to Sonos Control Pro, newest first.
 
 ---
 
+## 3.6.2
+
+- **A station the transport already sits on is played, not loaded again.**
+  3.6.1 gave a cloud station fifteen seconds to load; the next morning it still
+  did not answer in fifteen. Loading is the one slow thing in a scene — the
+  speaker has to ask the music service to resolve the stream, and cold, the
+  morning after, that took longer than any budget. `Play` does not: it answers
+  in ten milliseconds and the speaker buffers behind it, and it does so on a
+  station the transport has sat on, stopped, for over a day. Measured on the
+  speaker this was written for. So when the transport is already pointed at
+  the station — the morning after an evening of the same station, which is
+  most mornings — the slow command is not sent at all, and the scene says
+  "continued" rather than "playing". A speaker inside someone else's group
+  reads `x-rincon:` and takes the full path as before.
+
+---
+
 ## 3.6.1
 
 Nine days of one household's Homebridge log: the morning radio scene failed
